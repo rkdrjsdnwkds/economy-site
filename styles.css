@@ -635,9 +635,97 @@ body[data-mode="student"] .value{font-size:26px;letter-spacing:0}
 
 .tabletMarketFilter{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(260px,.55fr) 160px!important;gap:12px!important;align-items:end;max-width:none!important;padding:12px!important}.marketCategoryPills{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.marketCategoryPills button{min-height:34px;padding:7px 12px;background:#fff;border:1px solid #dbe5f3;color:#1f2937}.marketCategoryPills button.active{background:#2563eb;color:#fff;border-color:#2563eb}.tabletMarketFilter .field{margin:0}.marketSellerDeckGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important}.marketSellerDeck{min-height:246px!important;border-radius:18px!important;border:1px solid #dbe5f3!important;background:#fff!important;box-shadow:var(--tablet-shadow)!important}.marketSellerDeckHead{align-items:center}.marketSellerIdentity{display:flex;align-items:center;gap:10px;min-width:0}.marketSellerIdentity b{font-size:17px}.marketSellerAvatar{width:54px;height:54px;border-radius:16px;background:#eff6ff;border:1px solid #dbeafe;display:grid;place-items:center;overflow:hidden;flex:0 0 auto}.marketSellerAvatar .staticAvatarThumb{width:44px;height:44px}.marketSellerAvatar img,.marketSellerAvatar svg{max-width:42px;max-height:42px}.marketPreviewMini{border:1px solid #c7ddff!important;border-left:6px solid var(--market-blue)!important;box-shadow:0 4px 12px rgba(15,23,42,.07)!important}.marketDeckFooter{position:absolute!important;left:14px!important;right:14px!important;bottom:12px!important}.marketDeckFooter span{display:block!important;text-align:center;background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important;border-radius:12px!important;padding:8px 10px!important;box-shadow:none!important}.marketListing{border-radius:16px!important}.marketActions{justify-content:flex-end}
 
-.productTopGrid{display:grid;grid-template-columns:minmax(320px,.42fr) minmax(0,.58fr);gap:14px}.productBuyPanel{border-left:6px solid #2563eb!important}.productCardGrid{grid-template-columns:repeat(3,minmax(0,1fr))}.productStoreCard{cursor:pointer;min-height:188px}.productIcon{width:46px;height:46px;border-radius:14px;background:#eff6ff;border:1px solid #bfdbfe;display:grid;place-items:center;color:#1d4ed8;font-weight:1000;margin-bottom:8px}.incomeLineChart svg{width:100%;height:240px}.incomeChartCard{min-width:0}
+.productTopGrid{display:grid;grid-template-columns:1fr;gap:14px}.productBuyPanel{display:none!important}.productCardGrid{grid-template-columns:repeat(3,minmax(0,1fr))}.productStoreCard{cursor:pointer;min-height:188px}.productIcon{width:46px;height:46px;border-radius:14px;background:#eff6ff;border:1px solid #bfdbfe;display:grid;place-items:center;color:#1d4ed8;font-weight:1000;margin-bottom:8px}.incomeLineChart svg{width:100%;height:240px}.incomeChartCard{min-width:0}
 .ticketCardGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ticketMarketCard{border-left:7px solid var(--ticket-color)!important}.ticketPriceGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.ticketPriceGrid>div{padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc}.ticketPriceGrid span{display:block;color:#64748b;font-size:12px;font-weight:900}.ticketPriceGrid b{font-size:18px}.topDisplayGrid{display:grid;grid-template-columns:180px 180px 1fr;gap:12px}.topDisplayNotice{border-color:#fed7aa!important;background:linear-gradient(135deg,#fff,#fffbeb)!important}
 .financeGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.bankHero,.bankbookSelectPanel,.bankbookDetailPanel{background:linear-gradient(180deg,#fffdfa 0%,#fff8ee 100%)!important;border:1px solid #e3cba8!important;border-radius:24px!important;box-shadow:0 2px 0 rgba(199,153,92,.18),0 16px 34px rgba(91,59,35,.09)!important}
+.bankSummaryGrid .tabletStat{background:linear-gradient(180deg,#ffffff,#fff9f1)!important;border:1px solid #ead9be!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.85),0 6px 14px rgba(91,59,35,.05)!important}
+.bankSummaryGrid .tabletStat b{font-size:34px!important}
+.bankbookSelectPanel{padding:18px!important}
+.bankbookList{display:grid;grid-template-columns:1fr;gap:14px}
+.bankbookRow{width:100%;display:grid;grid-template-columns:176px minmax(0,1fr) 56px;gap:20px;align-items:center;text-align:left;background:linear-gradient(180deg,#fffdfa,#fff7eb);border:1px solid #dfccb0;color:#3f2b1d;border-radius:18px;padding:14px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 12px rgba(91,59,35,.05);transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease,background .14s ease;position:relative;overflow:hidden}
+.bankbookRow:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.4),transparent 30%,transparent 70%,rgba(255,255,255,.14));pointer-events:none}
+.bankbookRow:hover{transform:translateY(-2px);border-color:#8bce98;box-shadow:0 10px 22px rgba(22,163,74,.09),inset 0 1px 0 rgba(255,255,255,.95);background:linear-gradient(180deg,#ffffff,#f9fff6)}
+.bankbookRow.selected{border-color:#58b96e;background:linear-gradient(180deg,#fbfff9,#f4fff0);box-shadow:0 12px 24px rgba(22,163,74,.12),inset 0 1px 0 rgba(255,255,255,.95)}
+.bankbookCover{position:relative;width:162px;height:92px;border-radius:10px;border:1px solid rgba(91,59,35,.24);box-shadow:inset 8px 0 0 rgba(255,255,255,.28),inset -1px -1px 0 rgba(0,0,0,.06),0 6px 12px rgba(91,59,35,.14);display:flex;flex-direction:column;justify-content:flex-start;padding:16px 16px 12px;overflow:hidden;color:#fff}
+.bankbookCover:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.24) 1px,transparent 1px),linear-gradient(180deg,rgba(255,255,255,.16),transparent 35%);background-size:8px 8px,100% 100%;opacity:.9}
+.bankbookCover:after{content:"";position:absolute;left:10px;top:0;bottom:0;width:2px;background:rgba(255,255,255,.38)}
+.bankbookCover b,.bankbookCover em,.bankbookCover i{position:relative;z-index:1}
+.bankbookCover b{font-size:18px;line-height:1.1;font-weight:1000;text-shadow:0 2px 0 rgba(0,0,0,.15);letter-spacing:-.02em}
+.bankbookCover em{font-size:11px;font-style:normal;font-weight:900;opacity:.9;margin-top:auto;letter-spacing:.04em}
+.bankbookCover i{position:absolute;right:14px;bottom:12px;font-style:normal;font-size:28px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.16))}
+.bankbook-green{background:linear-gradient(135deg,#59c776,#2ea75a)}
+.bankbook-blue{background:linear-gradient(135deg,#5fa0ff,#3477eb)}
+.bankbook-orange{background:linear-gradient(135deg,#ffd45d,#f2aa1c)}
+.bankbook-purple{background:linear-gradient(135deg,#c39dff,#8a58ec)}
+.bankbook-red{background:linear-gradient(135deg,#ff9ba9,#eb5a64)}
+.bankbookRowText{display:flex;flex-direction:column;gap:8px;min-width:0;padding-right:10px}
+.bankbookRowText strong{font-size:18px;color:#3f2b1d;letter-spacing:-.02em}
+.bankbookRowText small{font-size:14px;color:#7b6a58;line-height:1.5}
+.bankbookRowText .pill{align-self:flex-start;border-radius:999px;padding:3px 10px;font-size:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.bankbookCheck{width:42px;height:42px;border-radius:999px;background:#fff;color:#16a34a;display:grid;place-items:center;font-size:24px;font-weight:1000;justify-self:end;border:1px solid #dfc08a;box-shadow:0 4px 10px rgba(91,59,35,.08)}
+.bankbookCheck span{transform:translateX(1px)}
+.bankbookRow.selected .bankbookCheck{background:#1faa59;color:#fff;border-color:#1faa59;box-shadow:0 8px 16px rgba(22,163,74,.18)}
+.bankbookDetailHead{margin-bottom:14px;align-items:flex-start!important}
+.bankbookDetailHead h2{font-size:22px!important;margin-bottom:4px!important}
+.bankbookBackBtn{background:linear-gradient(180deg,#fffdf7,#f8ecdb)!important;border:1px solid #d8bb8b!important;color:#6a4624!important;border-radius:14px!important;padding:10px 16px!important;font-weight:900!important;box-shadow:0 2px 0 rgba(199,153,92,.18)!important}
+.bankbookBackBtn:hover{transform:translateY(-1px)}
+.bankbookTabs{display:flex;align-items:flex-end;gap:0;overflow:auto;margin:6px 0 0;padding-left:6px;border-bottom:1px solid #d9b982}
+.bankbookTab{display:flex;align-items:center;gap:8px;min-height:48px;border-radius:14px 14px 0 0!important;border:1px solid #d9c19b!important;border-bottom:0!important;background:linear-gradient(180deg,#fffcf6,#fff6e8)!important;color:#5b3b23!important;box-shadow:none!important;padding:10px 18px!important;margin-right:6px;font-weight:900!important;white-space:nowrap}
+.bankbookTabIcon{font-size:18px;line-height:1}
+.bankbookTab.active{background:linear-gradient(180deg,#f8fff4,#f0ffe8)!important;color:#15803d!important;border-color:#73c688!important;position:relative;z-index:1;box-shadow:0 -3px 10px rgba(22,163,74,.08)!important}
+.bankbookTab-blue.active{background:linear-gradient(180deg,#f2f8ff,#ebf3ff)!important;color:#1d4ed8!important;border-color:#93c5fd!important}.bankbookTab-orange.active{background:linear-gradient(180deg,#fffaf0,#fff4d9)!important;color:#b45309!important;border-color:#f6c761!important}.bankbookTab-purple.active{background:linear-gradient(180deg,#f8f4ff,#f0e9ff)!important;color:#6d28d9!important;border-color:#c4b5fd!important}.bankbookTab-red.active{background:linear-gradient(180deg,#fff6f7,#ffe9ec)!important;color:#dc2626!important;border-color:#fda4af!important}
+.openBankbookPanel{background:linear-gradient(180deg,#fffdf9,#fff8ee);border:1px solid #d9c19b;border-radius:22px;margin-top:0;padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.88),0 6px 18px rgba(91,59,35,.08)}
+.openBankbookPages{position:relative;display:grid;grid-template-columns:minmax(320px,.92fr) minmax(380px,1.08fr);gap:0;min-height:430px;background:linear-gradient(180deg,#fffcf7,#fff8ea);border:1px solid #ead7b8;border-radius:18px;overflow:hidden}
+.openBankbookPages:before{display:none}
+.bankbookPage{padding:28px 30px;min-width:0;background-image:linear-gradient(rgba(234,215,184,.65) 1px,transparent 1px),linear-gradient(90deg,rgba(234,215,184,.65) 1px,transparent 1px);background-size:40px 40px;position:relative}
+.bankbookPage:after{content:"";position:absolute;left:0;right:0;bottom:0;height:38px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.25));pointer-events:none}
+.bankbookPage.left{border-right:1px solid rgba(224,199,159,.8)}
+.bankbookPage h3{text-align:center;color:#6a4624;margin-bottom:18px;font-size:28px;letter-spacing:-.03em}
+.bankbookBigValue,.bankbookTaxBox{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px;border:1px solid #ead7b8;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.78));box-shadow:0 10px 22px rgba(91,59,35,.05),inset 0 1px 0 rgba(255,255,255,.92)}
+.bankbookBigValue{min-height:170px;margin:10px 14px 18px}
+.bankbookTaxBox{min-height:110px;margin:0 14px}
+.bankbookBigIcon,.bankbookTaxIcon{font-size:42px;line-height:1;margin-bottom:12px;filter:drop-shadow(0 3px 0 rgba(91,59,35,.12))}
+.bankbookTaxIcon{font-size:30px;margin-bottom:10px}
+.bankbookBigValue span,.bankbookTaxBox span,.bankbookMiniStats span{display:block;color:#7b6a58;font-weight:900;font-size:13px}
+.bankbookBigValue b{display:block;color:#15803d;font-size:52px;line-height:1.08;margin:10px 0;letter-spacing:-.04em}
+.bankbookBigValue em{font-style:normal;color:#7b6a58;font-weight:900;font-size:15px}
+.bankbookTaxBox b{display:block;color:#b45309;font-size:38px;line-height:1.08;margin-top:8px;letter-spacing:-.03em}
+.bankbookTaxBox em{display:block;font-style:normal;color:#7b6a58;font-weight:900;font-size:13px;margin-top:8px}
+.bankbookTransferBox{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;border:1px solid #ead7b8;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.94),rgba(255,255,255,.78));box-shadow:0 10px 22px rgba(91,59,35,.05),inset 0 1px 0 rgba(255,255,255,.92);padding:18px;margin:0 14px}
+.bankbookTransferIcon{font-size:30px;line-height:1;filter:drop-shadow(0 3px 0 rgba(91,59,35,.12))}
+.bankbookTransferBox strong{font-size:22px;color:#6a4624;letter-spacing:-.03em}
+.bankbookTransferBox small{color:#7b6a58;font-weight:800}
+.bankbookTransferGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:8px;width:100%;margin-top:6px}
+.bankbookTransferBox select,.bankbookTransferBox input{width:100%;background:#fffdf8!important;border:1px solid #e3cfb0!important;border-radius:12px!important;padding:10px 12px!important;color:#3f2b1d!important}
+.bankbookTransferMemo{margin-top:0}
+.bankbookTransferBtn{width:100%;border-radius:12px!important;min-height:42px;font-weight:1000!important;margin-top:2px;box-shadow:0 3px 0 rgba(14,116,50,.22)!important}
+.bankbookLedger{padding:4px 10px 0}
+.bankbookLedger table{width:100%;border-collapse:separate;border-spacing:0;background:rgba(255,255,255,.82);border:1px solid #ead7b8;border-radius:16px;overflow:hidden;box-shadow:0 8px 18px rgba(91,59,35,.05)}
+.bankbookLedger thead th{background:#fff2be;color:#6a4624;font-weight:1000}
+.bankbookLedger th,.bankbookLedger td{padding:14px 16px;border-bottom:1px solid #efdfc5}
+.bankbookLedger tbody tr:last-child td{border-bottom:0}
+.bankbookLedger tbody tr:nth-child(even) td{background:rgba(255,250,240,.58)}
+.bankbookLedger td,.bankbookLedger th{font-size:14px}
+.bankbookLedgerControls{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin:0 10px 12px}
+.bankbookLedgerControls label{font-size:13px;font-weight:900;color:#7b6a58}
+.bankbookFilterSelect{min-width:140px;background:#fffdf8;border:1px solid #e3cfb0;border-radius:10px;padding:8px 10px;color:#5b3b23}
+.bankbookLedgerPager{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px}
+.bankPagerBtn{background:linear-gradient(180deg,#fffdf7,#f8ecdb)!important;border:1px solid #d8bb8b!important;color:#6a4624!important;border-radius:12px!important;padding:8px 14px!important;font-weight:900!important;box-shadow:0 2px 0 rgba(199,153,92,.18)!important}
+.bankPagerBtn:disabled{opacity:.45;cursor:not-allowed}
+.studentTaxPayBtn{white-space:nowrap}
+.bankbookMiniStats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.bankbookMiniStats>div{border:1px solid #ead7b8;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(255,255,255,.72));padding:14px;box-shadow:0 6px 14px rgba(91,59,35,.04)}
+.bankbookMiniStats b{display:block;color:#3f2b1d;font-size:20px;line-height:1.25;margin-top:6px;letter-spacing:-.02em}
+.bankbookForm{border-top:1px dashed #d9b982;margin-top:16px;padding-top:16px}
+.bankbookForm .field label{font-weight:900;color:#7b6a58}
+.bankbookForm input,.bankbookForm select{background:#fffdf8!important;border:1px solid #e3cfb0!important;border-radius:12px!important}
+.bankbookForm .toolbar{display:flex;gap:10px;flex-wrap:wrap}
+.bankbookDetailFooter{display:flex;justify-content:center;margin-top:18px}
+.bankbookPrimaryBtn{min-width:280px;border-radius:14px!important;min-height:54px;font-size:22px!important;box-shadow:0 4px 0 rgba(14,116,50,.22),0 14px 22px rgba(22,163,74,.16)!important}
+.bankbookDetailPanel .small{color:#7b6a58}
+@media(max-width:1100px){.bankbookRow{grid-template-columns:160px minmax(0,1fr) 48px}.bankbookCover{width:150px;height:88px}.bankbookBigValue b{font-size:42px}.openBankbookPages{grid-template-columns:1fr}.openBankbookPages:before{display:none}.bankbookPage.left{border-right:0;border-bottom:1px solid #e0c79f}}
+@media(max-width:760px){.bankbookRow{grid-template-columns:1fr;gap:12px}.bankbookCover{width:100%;max-width:220px}.bankbookCheck{justify-self:start}.bankbookTabs{flex-wrap:wrap}.bankbookTab{flex:1 1 140px;justify-content:center}.bankbookPage{padding:18px}.bankbookPage h3{font-size:24px}.bankbookBigValue{margin:0 0 14px}.bankbookTaxBox{margin:0}.bankbookMiniStats{grid-template-columns:1fr}.bankbookLedgerControls{justify-content:flex-start;flex-wrap:wrap}.bankbookLedger th,.bankbookLedger td{padding:10px 8px;font-size:13px}.bankbookLedgerPager{justify-content:flex-start}.bankbookTransferGrid{grid-template-columns:1fr}}
 .avatarShopLayout{display:grid;grid-template-columns:minmax(300px,.38fr) minmax(0,.62fr);gap:14px;align-items:start}.avatarShopHero{position:sticky;top:12px}.avatarCurrentCard{display:grid;grid-template-columns:170px minmax(0,1fr);gap:14px;align-items:center}.avatarCurrentPreview{min-height:240px;border-radius:18px;border:1px solid #dbeafe;background:#f8fbff;display:grid;place-items:center;overflow:hidden}.avatarCurrentPreview .staticAvatarThumb{width:150px;height:150px}.avatarShopCard{min-height:250px;transition:transform .12s ease,border-color .12s ease}.avatarShopCard:hover{transform:translateY(-2px);border-color:#93c5fd}.avatarShopCard.equippedAvatar{border:2px solid #2563eb!important;box-shadow:0 12px 28px rgba(37,99,235,.12)!important}.largeAvatarPreview{grid-template-columns:minmax(260px,360px) minmax(0,1fr)}
 .studentProfilePanel{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:center}
 .marketSellerAvatar .staticAvatarImg.small,.studentProfileMini .staticAvatarImg.small{position:static!important;left:auto!important;top:auto!important;transform:none!important;width:42px!important;height:42px!important;filter:drop-shadow(0 3px 0 rgba(15,23,42,.12))}
@@ -1979,6 +2067,293 @@ body[data-mode="student"] #status{
   display:none !important;
 }
 
+/* v60 class-wide economy index and ticket chart readability */
+.economyIndexGrid{
+  display:grid;
+  grid-template-columns:minmax(320px,.95fr) minmax(0,1.05fr);
+  gap:16px;
+  align-items:stretch;
+}
+.economyIndexHero{
+  position:relative;
+  border:1px solid #bfdbfe;
+  border-radius:22px;
+  padding:22px;
+  background:linear-gradient(135deg,#eff6ff,#ffffff);
+  box-shadow:0 14px 32px rgba(37,99,235,.12);
+}
+.economyIndexHero:before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:8px;
+  border-radius:22px 0 0 22px;
+  background:#2563eb;
+}
+.economyIndexHero.down:before{background:#ef4444}
+.economyIndexLabel{
+  color:#1d4ed8;
+  font-size:18px;
+  font-weight:1000;
+}
+.economyIndexValue{
+  margin-top:10px;
+  color:#0f172a;
+  font-size:clamp(38px,5vw,64px);
+  line-height:1;
+  font-weight:1000;
+  letter-spacing:0;
+}
+.economyIndexDelta{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-top:14px;
+  font-size:20px;
+  font-weight:1000;
+}
+.economyIndexHero.up .economyIndexDelta{color:#059669}
+.economyIndexHero.down .economyIndexDelta{color:#dc2626}
+.helpBtn{
+  margin-top:18px;
+  min-height:42px;
+  border-radius:14px;
+  background:#2563eb;
+  color:#fff;
+  border:0;
+  font-weight:900;
+}
+.economyMiniStats{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.economyMiniStats .value{
+  font-size:28px;
+  line-height:1.08;
+}
+.economyChartSection .incomeLineChart,
+.holdingsLineChart{
+  min-height:380px;
+}
+.incomeLineChart svg{
+  min-height:360px;
+}
+.studentEconomyIndexRow{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.studentEconomyIndexRow>div{
+  border:1px solid #dbeafe;
+  border-radius:18px;
+  background:#f8fbff;
+  padding:16px;
+}
+.studentEconomyIndexRow span{
+  display:block;
+  color:#64748b;
+  font-size:14px;
+  font-weight:900;
+}
+.studentEconomyIndexRow b{
+  display:block;
+  margin-top:8px;
+  font-size:28px;
+  color:#0f172a;
+}
+.upText{color:#059669!important}
+.downText{color:#dc2626!important}
+.ticketCurrentGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin:8px 0 16px;
+}
+.ticketCurrentCard{
+  border:1px solid #dbe5f3;
+  border-left:9px solid var(--ticket-color,#2563eb);
+  border-radius:20px;
+  padding:18px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(15,23,42,.07);
+}
+.ticketCurrentCard span{
+  display:block;
+  color:#475569;
+  font-size:15px;
+  font-weight:1000;
+}
+.ticketCurrentCard b{
+  display:block;
+  margin:8px 0;
+  font-size:34px;
+  line-height:1;
+  color:#0f172a;
+}
+.ticketCurrentCard em{
+  display:block;
+  margin-top:8px;
+  color:#64748b;
+  font-size:13px;
+  font-style:normal;
+  font-weight:800;
+}
+.ticketChange{
+  display:inline-flex!important;
+  width:max-content;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:14px!important;
+  font-weight:1000!important;
+}
+.ticketChange.up{background:#dcfce7;color:#047857}
+.ticketChange.down{background:#fee2e2;color:#b91c1c}
+.ticketFormulaMini{
+  margin-top:10px;
+  border-radius:14px;
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  padding:9px 10px;
+  color:#475569;
+  font-size:13px;
+  font-weight:900;
+}
+.recentTicketTable{
+  overflow-x:auto;
+}
+.recentTicketTable table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0 8px;
+}
+.recentTicketTable th{
+  color:#475569;
+  font-size:14px;
+  text-align:left;
+  padding:8px 12px;
+}
+.recentTicketTable td{
+  background:#fff;
+  border-top:1px solid #dbe5f3;
+  border-bottom:1px solid #dbe5f3;
+  padding:12px;
+  font-size:16px;
+}
+.recentTicketTable td:first-child{
+  border-left:1px solid #dbe5f3;
+  border-radius:14px 0 0 14px;
+}
+.recentTicketTable td:last-child{
+  border-right:1px solid #dbe5f3;
+  border-radius:0 14px 14px 0;
+}
+.recentTicketTable b{
+  font-size:19px;
+}
+.economyHelpBox{
+  font-size:17px;
+  line-height:1.7;
+  color:#0f172a;
+}
+.economyHelpBox ol{
+  margin:8px 0 8px 22px;
+}
+#chartCanvas{
+  min-height:520px!important;
+  height:520px!important;
+  background:#fff!important;
+  border:1px solid #dbe5f3!important;
+}
+@media(max-width:900px){
+  .economyIndexGrid,
+  .ticketCurrentGrid,
+  .studentEconomyIndexRow{
+    grid-template-columns:1fr;
+  }
+  .economyMiniStats{
+    grid-template-columns:1fr;
+  }
+  .economyIndexValue{
+    font-size:40px;
+  }
+}
+
+/* v61 fine notice payment system */
+.fineNoticePanel{
+  border-color:#fecaca!important;
+  background:linear-gradient(135deg,#fff,#fff7f7)!important;
+}
+.fineNoticeList{
+  display:grid;
+  gap:12px;
+}
+.fineNoticeCard{
+  border:1px solid #fecaca;
+  border-left:8px solid #ef4444;
+  border-radius:18px;
+  background:#fff;
+  padding:16px;
+  box-shadow:0 10px 26px rgba(239,68,68,.08);
+}
+.fineNoticeCard.partial{border-left-color:#f59e0b}
+.fineNoticeCard.overdue{
+  border-color:#ef4444;
+  box-shadow:0 12px 30px rgba(239,68,68,.14);
+}
+.fineNoticeTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.fineNoticeTop b{
+  display:block;
+  font-size:19px;
+  color:#991b1b;
+}
+.fineNoticeTop span{
+  display:inline-flex;
+  margin-top:6px;
+  border-radius:999px;
+  background:#fee2e2;
+  color:#991b1b;
+  padding:5px 9px;
+  font-size:12px;
+  font-weight:1000;
+}
+.fineNoticeTop strong{
+  font-size:32px;
+  line-height:1;
+  color:#dc2626;
+  white-space:nowrap;
+}
+.fineNoticeMeta{
+  margin-top:10px;
+  color:#475569;
+  font-weight:900;
+}
+.fineSnapshotGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:12px 0;
+}
+.fineSnapshotGrid span{
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  background:#f8fafc;
+  padding:8px 10px;
+  font-size:13px;
+  font-weight:900;
+  color:#334155;
+}
+@media(max-width:700px){
+  .fineNoticeTop{display:block}
+  .fineNoticeTop strong{display:block;margin-top:10px}
+  .fineSnapshotGrid{grid-template-columns:1fr 1fr}
+}
+
 /* 로그인 화면에서는 바깥 여백 제거 */
 body[data-mode="student"] .wrap:has(.exactPixelLoginPage),
 body:has(.exactPixelLoginPage) .wrap{
@@ -2144,4 +2519,47 @@ body:has(.exactPixelLoginPage) .wrap{
 .bankPage table .toolbar{
   gap:6px;
   flex-wrap:wrap;
+}
+
+/* v62 corporation stock system */
+.corporationCardGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.corporationHoldingGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.corpHoldingCard,.corpDetailCard{background:#fffaf0;border:1px solid #ead7b8;border-radius:20px;padding:16px;box-shadow:0 8px 24px rgba(120,72,18,.08)}
+.corpShareBig{font-size:42px;font-weight:900;color:#7c3aed;letter-spacing:-1px;margin:8px 0}
+.miniCorpStats{margin:12px 0}.miniCorpStats>div{background:#fff;border:1px solid #f1e3c8;border-radius:14px;padding:10px}.miniCorpStats span{display:block;color:#64748b;font-size:12px}.miniCorpStats b{font-size:18px}
+.shareMarketTable th,.shareMarketTable td{white-space:nowrap}.corporationStudentTop .tabletStat b{font-size:28px}
+.corpDetailCard .scroll{max-height:260px}.corpDetailCard .toolbar{margin-top:12px;flex-wrap:wrap}
+
+/* v76 구경하기 순위표 폭 정리 */
+.visitPage{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+  width:100%;
+}
+.visitPage .fullRankSection{
+  width:100%;
+}
+.visitPage .fullRankSection .scroll{
+  max-height:none;
+  overflow-x:auto;
+}
+.visitPage .rankTable{
+  min-width:980px;
+}
+.visitPage .corporationRankTable{
+  min-width:760px;
+}
+.peerAssetModal{
+  display:grid;
+  grid-template-columns:minmax(320px,1fr) minmax(280px,.75fr);
+  gap:14px;
+  align-items:start;
+}
+.peerAssetSummary .assetStatGrid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+@media(max-width:900px){
+  .peerAssetModal{grid-template-columns:1fr}
+  .visitPage .rankTable{min-width:860px}
 }

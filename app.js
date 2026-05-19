@@ -1,11 +1,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getDatabase, ref, onValue, set, update, push, remove } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getDatabase, ref, onValue, set, update, push, remove, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 import { STATIC_AVATARS } from "./avatar-assets.js";
 import { CUSTOM_AVATARS } from "./custom-avatars.js";
 import { MINIROOM_TEMPLATES } from "./miniroom-assets.js";
 
 window.__ECONOMY_BOOT_STARTED__ = true;
 let firebaseReady = false;
+let snackDefaultsRepairQueued = false;
+let snackDefaultsRepairCompleted = false;
 const SITE_CONFIG = window.ECONOMY_SITE_CONFIG || {};
 function cfg(path, fallback){
   const value=String(path).split(".").reduce((acc,key)=>acc && Object.prototype.hasOwnProperty.call(acc,key) ? acc[key] : undefined,SITE_CONFIG);
@@ -64,6 +66,12 @@ const db = getDatabase(app);
 const rootRef = ref(db, "classEconomy/main");
 
 const CENTRAL = "CENTRAL";
+const SNACK_PRODUCT_DEFAULTS = {
+  dust:{name:"먼지",kind:"fixed",priceType:"fixed",fixedPrice:10,price:10,wholesaleRate:0.9,secret:false,note:"고정가 / 10열매"},
+  peopleSnack:{name:"국민간식",kind:"economyIndex",priceType:"economyIndex",basePrice:20,baseEconomyIndex:100,sensitivity:0.5,minPrice:15,maxPrice:30,wholesaleRate:0.7,price:20,secret:false,note:"경제지수 연동 / 기본 소비재"},
+  silverSpoon:{name:"은수저",kind:"economyIndex",priceType:"economyIndex",basePrice:50,baseEconomyIndex:100,sensitivity:1.1,minPrice:35,maxPrice:80,wholesaleRate:0.6,price:50,secret:false,note:"경제지수 연동 / 고급 과자"},
+  artifact:{name:"고대의 유물",kind:"economyIndex",priceType:"economyIndex",basePrice:100,baseEconomyIndex:100,sensitivity:1.6,minPrice:70,maxPrice:200,wholesaleRate:0.55,price:100,secret:false,note:"경제지수 연동 / 희귀 사치재"}
+};
 const ticketMeta = {
   classClean: {name:"전체 청소 면제권", formula:"전날 총소득", color:"#2563eb"},
   personalClean: {name:"개인 청소 면제권", formula:"전날 총소득 ÷ 5", color:"#7c3aed"},
@@ -87,14 +95,21 @@ const defaultData = {
   loans: {},
   bonds: {},
   bondIssues: {},
+  fines: {},
+  corporations: {},
+  shareSellOrders: {},
+  shareTransactions: {},
+  corporateRepresentativeHistory: {},
   products: {
-    dust:{id:"dust",name:"먼지",kind:"fixed",fixedPrice:10,divisor:0,secret:false,secretWholesale:0,note:"고정가 안정 장치"},
-    peopleSnack:{id:"peopleSnack",name:"국민간식",kind:"incomeDiv",fixedPrice:0,divisor:20,secret:false,secretWholesale:0,note:"전날 총소득 ÷ 20"},
-    silverSpoon:{id:"silverSpoon",name:"은수저",kind:"incomeDiv",fixedPrice:0,divisor:15,secret:false,secretWholesale:0,note:"전날 총소득 ÷ 15"},
-    artifact:{id:"artifact",name:"고대의 유물",kind:"secret",fixedPrice:0,divisor:0,secret:true,secretWholesale:80,note:"도매가 비공개"}
+    dust:{id:"dust",name:"먼지",kind:"fixed",priceType:"fixed",fixedPrice:10,price:10,wholesaleRate:0.9,secret:false,note:"고정가 / 10열매"},
+    peopleSnack:{id:"peopleSnack",name:"국민간식",kind:"economyIndex",priceType:"economyIndex",basePrice:20,baseEconomyIndex:100,sensitivity:0.5,minPrice:15,maxPrice:30,wholesaleRate:0.7,price:20,secret:false,note:"경제지수 연동 / 기본 소비재"},
+    silverSpoon:{id:"silverSpoon",name:"은수저",kind:"economyIndex",priceType:"economyIndex",basePrice:50,baseEconomyIndex:100,sensitivity:1.1,minPrice:35,maxPrice:80,wholesaleRate:0.6,price:50,secret:false,note:"경제지수 연동 / 고급 과자"},
+    artifact:{id:"artifact",name:"고대의 유물",kind:"economyIndex",priceType:"economyIndex",basePrice:100,baseEconomyIndex:100,sensitivity:1.6,minPrice:70,maxPrice:200,wholesaleRate:0.55,price:100,secret:false,note:"경제지수 연동 / 희귀 사치재"}
   },
   jobs: {"banker": {"id": "banker", "name": "은행장", "wage": 100, "payType": "일당", "slots": 1, "note": ""}, "siri": {"id": "siri", "name": "시리", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "bixby": {"id": "bixby", "name": "빅스비", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "cleaner": {"id": "cleaner", "name": "청소부", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "artist": {"id": "artist", "name": "화가", "wage": 20, "payType": "건당", "slots": 2, "note": ""}, "item_manager": {"id": "item_manager", "name": "물품관리사", "wage": 20, "payType": "일당", "slots": 1, "note": ""}, "thief": {"id": "thief", "name": "도둑", "wage": 0, "payType": "자율", "slots": 1, "note": ""}, "announcer": {"id": "announcer", "name": "아나운서", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "gatekeeper": {"id": "gatekeeper", "name": "문지기", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "auditor": {"id": "auditor", "name": "감사원", "wage": 100, "payType": "건당", "slots": 1, "note": ""}, "lightning": {"id": "lightning", "name": "번개맨", "wage": 20, "payType": "일당", "slots": 1, "note": ""}, "scribe": {"id": "scribe", "name": "서기", "wage": 20, "payType": "일당", "slots": 1, "note": ""}, "police": {"id": "police", "name": "경찰", "wage": 20, "payType": "일당", "slots": 2, "note": ""}, "board_manager": {"id": "board_manager", "name": "칠판관리사", "wage": 10, "payType": "일당", "slots": 1, "note": ""}, "social_worker": {"id": "social_worker", "name": "사회복지사", "wage": 10, "payType": "일당", "slots": 2, "note": ""}, "accountant": {"id": "accountant", "name": "회계사", "wage": 20, "payType": "일당", "slots": 1, "note": ""}, "tax_office": {"id": "tax_office", "name": "국세청", "wage": 0, "payType": "변동 일당", "slots": 2, "note": ""}, "referee": {"id": "referee", "name": "심판", "wage": 10, "payType": "일당", "slots": 2, "note": ""}, "doctor": {"id": "doctor", "name": "의사", "wage": 0, "payType": "일당", "slots": 1, "note": ""}},
   requests: {},
+  workClaims: {},
+  taxOfficeWageRecords: {},
   roleWarnings: {},
   dutyNeglect: {},
   marketListings: {},
@@ -102,7 +117,8 @@ const defaultData = {
   industryRoles: {},
   industryInventories: {},
   industryDailyActions: {},
-  settings:{taxRate:0.1,fineRate:0.05,bondDays:7,depositRate:0.05,bondRate:0.03,avatarCreatorRate:0.1},
+  settings:{taxRate:0.1,fineRate:0.05,fineMin:10,fineMax:0,bondDays:7,depositRate:0.05,bondRate:0.03,avatarCreatorRate:0.1},
+  dailyEconomyStats:{},
   history:{},
   cosmeticPrices:{},
   avatarCreators:{},
@@ -183,24 +199,34 @@ const PIXEL_ASSETS = {};
 
 
 let data = structuredClone(defaultData);
+let derived = {students:[],ledger:[],ledgerByDay:{},ledgerByAccount:{},balances:{},centralByEntry:{},organizationAccountIds:[]};
 let mode = localStorage.getItem("economyMode") || cfg("ux.defaultMode","student");
 let currentTab = "dashboard";
 let selectedStudent = localStorage.getItem("selectedStudent") || "";
 let studentTab = localStorage.getItem("studentTab") || cfg("ux.defaultStudentTab","assets");
+let selectedBankbook = "";
+let bankLedgerDateFilter = "";
+let bankLedgerPage = 1;
+const BANK_LEDGER_PAGE_SIZE = 8;
 let marketCategory = localStorage.getItem("marketCategory") || "전체";
 let marketSearch = localStorage.getItem("marketSearch") || "";
 let marketPage = Math.max(1, Number(localStorage.getItem("marketPage") || "1"));
 let marketSort = localStorage.getItem("marketSort") || "boost";
 let uiEditing = false;
 let pendingRealtimeRender = false;
+let renderTimer = 0;
 function isEditingElement(el){return el && ["INPUT","SELECT","TEXTAREA"].includes(el.tagName)}
+function scheduleRender(delay=80){
+  clearTimeout(renderTimer);
+  renderTimer=setTimeout(()=>render(),delay);
+}
 document.addEventListener("focusin", e=>{ if(isEditingElement(e.target)) uiEditing=true; });
 document.addEventListener("focusout", e=>{
   if(isEditingElement(e.target)){
     setTimeout(()=>{
       if(!isEditingElement(document.activeElement)){
         uiEditing=false;
-        if(pendingRealtimeRender){pendingRealtimeRender=false; render();}
+        if(pendingRealtimeRender){pendingRealtimeRender=false; scheduleRender();}
       }
     },250);
   }
@@ -229,6 +255,19 @@ function applyCatalogExtensions(){
   Object.assign(INDUSTRY_CATALOG.products,catalogMap(industry.products));
 }
 applyCatalogExtensions();
+function ensureRequiredEconomyExtensions(){
+  defaultData.workClaims = defaultData.workClaims || {};
+  defaultData.taxOfficeWageRecords = defaultData.taxOfficeWageRecords || {};
+  defaultData.jobWageRules = defaultData.jobWageRules || {};
+  defaultData.products = defaultData.products || {};
+  Object.entries(SNACK_PRODUCT_DEFAULTS).forEach(([id,defaults])=>{
+    defaultData.products[id]={id,...defaults,...obj(defaultData.products[id])};
+  });
+  if(!defaultData.jobs.snack_retailer){
+    defaultData.jobs.snack_retailer={id:"snack_retailer",name:"과자 소매상",wage:0,payType:"자율",slots:4,note:"과자 도매 구매 후 판매 재고를 관리합니다."};
+  }
+}
+ensureRequiredEconomyExtensions();
 function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
 function money(v){return Math.round(n(v))}
 function fmt(v){return money(v).toLocaleString("ko-KR")}
@@ -249,31 +288,368 @@ function mergeDefaults(base, incoming){
   function rec(t,s){for(const k in s){if(s[k] && typeof s[k]==="object" && !Array.isArray(s[k]) && t[k] && typeof t[k]==="object") rec(t[k],s[k]); else t[k]=s[k];} return t}
   return rec(out,incoming);
 }
+function rebuildDerivedState(){
+  const ledger=arr(data.ledger);
+  const balances={};
+  const ledgerByDay={};
+  const ledgerByAccount={};
+  const centralByEntry={};
+  const organizationIds=new Set();
+  ledger.forEach(e=>{
+    const day=dayOfEntry(e) || today();
+    if(!ledgerByDay[day]) ledgerByDay[day]=[];
+    ledgerByDay[day].push(e);
+    let central=0;
+    arr(e.lines).forEach(l=>{
+      const account=String(l.account||"");
+      const delta=money(l.delta);
+      if(!account) return;
+      balances[account]=money(n(balances[account])+delta);
+      if(!ledgerByAccount[account]) ledgerByAccount[account]=[];
+      ledgerByAccount[account].push(e);
+      if(account===CENTRAL) central+=delta;
+      else if(!obj(data.students)[account]) organizationIds.add(account);
+    });
+    centralByEntry[e.id || e.ts || Math.random().toString(36)]=central;
+  });
+  Object.values(ledgerByDay).forEach(rows=>rows.sort((a,b)=>(a.ts||"").localeCompare(b.ts||"")));
+  Object.values(ledgerByAccount).forEach(rows=>rows.sort((a,b)=>(a.ts||"").localeCompare(b.ts||"")));
+  derived={students:arr(data.students),ledger,ledgerByDay,ledgerByAccount,balances,centralByEntry,organizationAccountIds:[...organizationIds]};
+}
+function snackProductRepairUpdates(){
+  const updates={};
+  const existing=obj(data.products);
+  Object.entries(SNACK_PRODUCT_DEFAULTS).forEach(([defaultId,defaults])=>{
+    const found=Object.entries(existing).find(([id,p])=>id===defaultId || p?.name===defaults.name);
+    const id=found?.[0] || defaultId;
+    const current=obj(found?.[1]);
+    const next={...defaults,id,name:defaults.name};
+    Object.entries(next).forEach(([key,value])=>{
+      if(current[key]!==value) updates[`products/${id}/${key}`]=value;
+    });
+  });
+  return updates;
+}
+async function repairSnackProductDefaultsIfNeeded(){
+  if(snackDefaultsRepairQueued || snackDefaultsRepairCompleted) return;
+  const updates=snackProductRepairUpdates();
+  if(!Object.keys(updates).length){snackDefaultsRepairCompleted=true; return;}
+  snackDefaultsRepairQueued=true;
+  try{ await dbUpdate("",updates); }
+  catch(e){ console.warn("snack product defaults repair failed", e); }
+  finally{ snackDefaultsRepairQueued=false; snackDefaultsRepairCompleted=true; }
+}
 function student(id){return obj(data.students)[id]}
 function studentName(id){return id===CENTRAL ? "중앙은행" : (student(id)?.name || "알 수 없음")}
-function students(){return arr(data.students)}
+function students(){return derived.students?.length ? derived.students : arr(data.students)}
 function balanceOf(id){
-  return arr(data.ledger).reduce((sum,e)=>sum + arr(e.lines).filter(l=>l.account===id).reduce((a,l)=>a+n(l.delta),0),0)
+  return money(obj(derived.balances)[id])
 }
-function centralDelta(e){return arr(e.lines).filter(l=>l.account===CENTRAL).reduce((a,l)=>a+n(l.delta),0)}
-function todayG(){return arr(data.ledger).filter(e=>e.day===today()).reduce((sum,e)=>sum + Math.max(0,-centralDelta(e)),0)}
-function todayT(){return arr(data.ledger).filter(e=>e.day===today()).reduce((sum,e)=>sum + Math.max(0,centralDelta(e)),0)}
+function centralDelta(e){return e?.id && derived.centralByEntry[e.id]!==undefined ? n(derived.centralByEntry[e.id]) : arr(e.lines).filter(l=>l.account===CENTRAL).reduce((a,l)=>a+n(l.delta),0)}
+function todayG(){return ledgerForDay(today()).reduce((sum,e)=>sum + Math.max(0,-centralDelta(e)),0)}
+function todayT(){return ledgerForDay(today()).reduce((sum,e)=>sum + Math.max(0,centralDelta(e)),0)}
 function todayY(){return todayG()-todayT()}
 function tax(amount){return money(n(amount)*n(data.settings.taxRate))}
-function fineAmount(id){return money(balanceOf(id)*n(data.settings.fineRate))}
-function requireCash(id, amount){if(balanceOf(id)<money(amount)){toast(`${studentName(id)} 잔고 부족: 필요 ${won(amount)}, 현재 ${won(balanceOf(id))}`); return false} return true}
-function ticketBaseMultiplier(k){
-  const rules=obj(cfg("formulas.tickets.baseMultipliers",{}));
-  const fallback=k==="classClean"?1:k==="personalClean"?0.2:k==="playHour"?3:1;
-  const raw=Object.prototype.hasOwnProperty.call(rules,k) ? rules[k] : rules.default;
-  const value=Number(raw);
-  return Number.isFinite(value) ? value : fallback;
+function fineAmount(id){return calculateFineAmount(id).fineAmount}
+function bondCurrentValueOf(id){
+  return arr(data.bonds)
+    .filter(b=>b.owner===id && b.status==="active")
+    .reduce((sum,b)=>sum+money(n(b.principal)*(1+n(b.rate)/100)),0);
 }
+
+function idLabel(id){return student(id)?.name || id || "-"}
+function corporationCollection(){return obj(data.corporations || data.companies || data.corporateEntities)}
+function corporationRaw(id){return obj(corporationCollection())[id] || null}
+function corporationCashBalance(c){
+  if(!c) return 0;
+  const accountId=c.cashAccountId || c.accountId || c.id;
+  const ledgerBalance=accountId ? money(balanceOf(accountId)) : 0;
+  if(ledgerBalance!==0) return ledgerBalance;
+  if(c.cashBalance!==undefined) return money(c.cashBalance);
+  if(c.balance!==undefined) return money(c.balance);
+  return 0;
+}
+function corporationMembers(c){
+  const set=new Set();
+  const add=v=>{ if(v && student(v)) set.add(v); };
+  const members=c?.members ?? c?.memberIds ?? c?.studentIds ?? c?.owners;
+  if(Array.isArray(members)) members.forEach(add);
+  else if(members && typeof members==="object") Object.entries(members).forEach(([k,v])=>{ if(v===true || v===1 || v==="true") add(k); else if(typeof v==="string") add(v); else add(k); });
+  Object.keys(obj(c?.shareholders)).forEach(add);
+  add(c?.representativeStudentId || c?.representativeId || c?.leaderId || c?.ownerId);
+  return [...set];
+}
+function distributeShares(memberIds,preferredId=""){
+  const ids=[...new Set(memberIds.filter(id=>student(id)))];
+  if(!ids.length) return {};
+  const base=Math.floor(100/ids.length), rem=100-base*ids.length;
+  const ordered=preferredId && ids.includes(preferredId) ? [preferredId,...ids.filter(id=>id!==preferredId)] : ids;
+  const out={};
+  ordered.forEach((id,i)=>out[id]=base+(i<rem?1:0));
+  return out;
+}
+function corporationShareholders(c){
+  const raw=obj(c?.shareholders || c?.shares || c?.holders);
+  const out={};
+  Object.entries(raw).forEach(([id,v])=>{
+    const shares=money(typeof v==="object" ? (v.shares ?? v.amount ?? v.count ?? 0) : v);
+    if(student(id) && shares>0) out[id]=shares;
+  });
+  if(Object.keys(out).length) return out;
+  return distributeShares(corporationMembers(c), c?.representativeStudentId || c?.representativeId || c?.leaderId || "");
+}
+function corporationShareTotal(c){return Object.values(corporationShareholders(c)).reduce((a,b)=>a+n(b),0)}
+function corporationNetAssetValue(c){
+  const explicit=c?.netAssetValue ?? c?.officialNetAssetValue;
+  if(explicit!==undefined) return money(explicit);
+  return money(corporationCashBalance(c)+n(c?.inventoryValue)+n(c?.receivables)-n(c?.debt));
+}
+function corporationOfficialSharePrice(c){
+  const explicit=c?.officialSharePrice;
+  if(explicit!==undefined && n(explicit)>0) return money(explicit);
+  return money(corporationNetAssetValue(c)/100);
+}
+function normalizeCorporation(id,c){
+  const row={...(c||{}),id:id || c?.id};
+  row.name=row.name || row.title || `법인 ${row.id}`;
+  row.totalShares=n(row.totalShares)||100;
+  row.shareholders=corporationShareholders(row);
+  row.representativeStudentId=resolveCorporationRepresentative(row,row.representativeStudentId || row.representativeId || row.leaderId || "");
+  row.netAssetValue=corporationNetAssetValue(row);
+  row.officialSharePrice=corporationOfficialSharePrice(row);
+  row.shareTotal=Object.values(row.shareholders).reduce((a,b)=>a+n(b),0);
+  return row;
+}
+function corporations(){
+  return Object.entries(corporationCollection()).map(([id,c])=>normalizeCorporation(id,c)).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ko"));
+}
+function corporationById(id){
+  const c=corporationRaw(id);
+  return c ? normalizeCorporation(id,c) : null;
+}
+function resolveCorporationRepresentative(c,current=""){
+  const holders=corporationShareholders(c);
+  const rows=Object.entries(holders).filter(([,v])=>n(v)>0).sort((a,b)=>n(b[1])-n(a[1]) || idLabel(a[0]).localeCompare(idLabel(b[0]),"ko"));
+  if(!rows.length) return "";
+  const max=n(rows[0][1]);
+  const leaders=rows.filter(([,v])=>n(v)===max).map(([id])=>id);
+  if(current && leaders.includes(current)) return current;
+  return leaders.length===1 ? leaders[0] : (current || leaders[0]);
+}
+function studentCorporationShares(studentId){
+  return corporations().map(c=>{
+    const shares=n(c.shareholders[studentId]);
+    return shares>0 ? {corporation:c,shares,value:money(shares*c.officialSharePrice)} : null;
+  }).filter(Boolean);
+}
+function openShareSellOrders(){return arr(data.shareSellOrders).filter(o=>o && o.status==="open").sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""))}
+function shareSellOrdersForCorporation(corpId){return openShareSellOrders().filter(o=>o.corporationId===corpId)}
+function openShareSellAmount(studentId,corpId){return openShareSellOrders().filter(o=>o.sellerStudentId===studentId && o.corporationId===corpId).reduce((sum,o)=>sum+n(o.shareAmount),0)}
+function availableCorporationShares(studentId,corpId){const c=corporationById(corpId); return Math.max(0,n(c?.shareholders?.[studentId])-openShareSellAmount(studentId,corpId))}
+function updateRepresentativeFields(updates,corpId,nextCorp,previousRepresentative=""){
+  const rep=resolveCorporationRepresentative(nextCorp,previousRepresentative);
+  updates[`corporations/${corpId}/representativeStudentId`]=rep || null;
+  if(rep && rep!==previousRepresentative){
+    const hid=`rep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+    updates[`corporateRepresentativeHistory/${hid}`]={id:hid,corporationId:corpId,previousRepresentativeStudentId:previousRepresentative||"",newRepresentativeStudentId:rep,reason:"shareholder_change",changedAt:new Date().toISOString()};
+  }
+  return rep;
+}
+function corporationLegacyEquityValueOf(id){
+  const equities=obj(data.corporateEquities || data.companyShares || data.corporateShares);
+  return Object.values(equities).reduce((sum,row)=>{
+    if(!row || typeof row!=="object") return sum;
+    if(row.studentId===id || row.owner===id || row.ownerId===id) return sum+money(row.value ?? row.amount ?? row.equityValue ?? 0);
+    const holders=obj(row.holders || row.shareholders || row.owners);
+    const h=holders[id];
+    if(h && typeof h==="object") return sum+money(h.value ?? h.amount ?? h.equityValue ?? 0);
+    return sum+money(h||0);
+  },0);
+}
+function corporateEquityValueOf(id){
+  const fromCorporations=studentCorporationShares(id).reduce((sum,row)=>sum+money(row.value),0);
+  return money(fromCorporations+corporationLegacyEquityValueOf(id));
+}
+
+function fineAssetSnapshot(id){
+  const personalCash=money(balanceOf(id));
+  const deposits=money(obj(data.deposits)[id]);
+  const savings=money(savingsValueOf(id));
+  const bonds=money(bondCurrentValueOf(id));
+  const ticketsValue=money(ticketValueOf(id));
+  const corporateEquityValue=money(corporateEquityValueOf(id));
+  const totalFineBaseAssets=money(personalCash+deposits+savings+bonds+ticketsValue+corporateEquityValue);
+  return {personalCash,deposits,savings,bonds,ticketsValue,corporateEquityValue,totalFineBaseAssets};
+}
+function fineMaxAmount(){
+  const configured=money(data.settings?.fineMax);
+  if(configured>0) return configured;
+  return Math.max(money(currentEconomyStats(today()).averageHoldingPerStudent/5), money(data.settings?.fineMin)||10);
+}
+function calculateFineAmount(id){
+  const assetSnapshot=fineAssetSnapshot(id);
+  const fineRate=n(data.settings?.fineRate)||0.05;
+  const minFine=money(data.settings?.fineMin || 10);
+  const maxFine=fineMaxAmount();
+  const raw=money(assetSnapshot.totalFineBaseAssets*fineRate);
+  const fineAmount=money(clampNum(raw,minFine,maxFine));
+  return {assetSnapshot,fineRate,minFine,maxFine,raw,fineAmount};
+}
+function fineDueDate(issuedAtIso){
+  const d=new Date(issuedAtIso || new Date().toISOString());
+  d.setDate(d.getDate()+7);
+  return d.toISOString().slice(0,10);
+}
+function fineRowsForStudent(id){
+  return arr(data.fines).filter(f=>f.studentId===id).sort((a,b)=>(b.issuedAt||"").localeCompare(a.issuedAt||""));
+}
+function remainingFineAmount(f){return Math.max(0,money(f.remainingAmount ?? (n(f.fineAmount)-n(f.paidAmount))))}
+function fineEffectiveStatus(f){
+  const status=f.status || "unpaid";
+  if(status==="paid" || status==="cancelled") return status;
+  if(f.dueDate && f.dueDate<today()) return "overdue";
+  return remainingFineAmount(f)<n(f.fineAmount) ? "partial" : status;
+}
+function unpaidFinesForStudent(id){
+  return fineRowsForStudent(id).filter(f=>!["paid","cancelled"].includes(fineEffectiveStatus(f)) && remainingFineAmount(f)>0);
+}
+function hasUnpaidFine(id){return unpaidFinesForStudent(id).length>0}
+function overdueFineCount(id){return unpaidFinesForStudent(id).filter(f=>fineEffectiveStatus(f)==="overdue").length}
+function requireCash(id, amount){if(balanceOf(id)<money(amount)){toast(`${studentName(id)} 잔고 부족: 필요 ${won(amount)}, 현재 ${won(balanceOf(id))}`); return false} return true}
 function round10(x){return Math.round(n(x)/10)*10}
 function isTopDisplayTicket(k){return k==="topDisplay"}
-function basePrice(k){return isTopDisplayTicket(k)?5:round10(n(data.previousIncome)*ticketBaseMultiplier(k))}
-function ticketUnit(k){return isTopDisplayTicket(k)?0:Math.max(10,round10(basePrice(k)*0.1))}
 function clampNum(value,min,max){return Math.min(Math.max(n(value),min),max)}
+function pct(v){return `${v>0?"+":""}${(Math.round(n(v)*10)/10).toFixed(1)}%`}
+function signedWon(v){return `${n(v)>=0?"+":"-"}${won(Math.abs(v))}`}
+function activeStudents(){return students().filter(s=>s && s.id && s.active!==false)}
+function activeStudentCount(){return Math.max(1,activeStudents().length)}
+function dayOfEntry(e){return String(e?.day || e?.date || (e?.ts||"").slice(0,10) || "").slice(0,10)}
+function ledgerForDay(day){return obj(derived.ledgerByDay)[day] || []}
+function typeText(e){return String(e?.type || "")}
+function isIssuedIncomeEntry(e){
+  const t=typeText(e);
+  const positiveTypes=["초기지급","일괄지급","직업임금","지급","전체지급","예금이자","상세지급"];
+  return positiveTypes.some(x=>t.includes(x));
+}
+function issuedIncomeOnDay(day=today()){
+  return ledgerForDay(day)
+    .filter(isIssuedIncomeEntry)
+    .reduce((sum,e)=>sum+Math.max(0,-centralDelta(e)),0);
+}
+function burnedAmountOnDay(day=today()){
+  return ledgerForDay(day).reduce((sum,e)=>sum+Math.max(0,centralDelta(e)),0);
+}
+function previousDays(day=today(),count=5){
+  const out=[];
+  const d=new Date(day+"T00:00:00");
+  for(let i=1;i<=count;i++){
+    const x=new Date(d);
+    x.setDate(d.getDate()-i);
+    out.push(x.toISOString().slice(0,10));
+  }
+  return out;
+}
+function recentIssuedIncomeAverage(day=today()){
+  const values=previousDays(day,5).map(d=>{
+    const saved=obj(data.dailyEconomyStats)[d];
+    return saved && typeof saved==="object" && saved.issuedIncome!==undefined ? n(saved.issuedIncome) : issuedIncomeOnDay(d);
+  }).filter(v=>v>0);
+  if(!values.length) return Math.max(1,issuedIncomeOnDay(day),n(data.previousIncome));
+  return values.reduce((a,b)=>a+b,0)/values.length;
+}
+function organizationAccountIds(){
+  return derived.organizationAccountIds || [];
+}
+function organizationCashTotal(){
+  return organizationAccountIds().reduce((sum,id)=>sum+balanceOf(id),0);
+}
+function classEconomyStatsBase(day=today()){
+  const studentCash=activeStudents().reduce((sum,s)=>sum+balanceOf(s.id),0);
+  const organizationCash=organizationCashTotal();
+  const deposits=activeStudents().reduce((sum,s)=>sum+n(obj(data.deposits)[s.id]),0);
+  const savings=activeStudents().reduce((sum,s)=>sum+savingsValueOf(s.id),0);
+  const bonds=arr(data.bonds).filter(b=>b.status==="active" && student(b.owner)).reduce((sum,b)=>sum+n(b.principal),0);
+  const liquidHoldings=money(studentCash+organizationCash);
+  const lockedHoldings=money(deposits+savings+bonds);
+  const totalHoldings=money(liquidHoldings+lockedHoldings);
+  const issuedIncome=money(issuedIncomeOnDay(day));
+  const burnedAmount=money(burnedAmountOnDay(day));
+  return {
+    date:day,
+    studentCount:activeStudentCount(),
+    totalHoldings,
+    liquidHoldings,
+    lockedHoldings,
+    issuedIncome,
+    burnedAmount,
+    netChange:money(issuedIncome-burnedAmount),
+    averageHoldingPerStudent:money(totalHoldings/activeStudentCount())
+  };
+}
+function ticketDemandCounts(ticketId,day=today()){
+  let buyOrders=0, sellOrders=0;
+  arr(data.requests).forEach(r=>{
+    if(r.ticketId!==ticketId) return;
+    const rday=String((r.ts||"").slice(0,10) || day);
+    if(rday && rday!==day) return;
+    if(r.type==="ticketBuy") buyOrders++;
+    if(r.type==="ticketSell") sellOrders++;
+  });
+  ledgerForDay(day).forEach(e=>{
+    if(obj(e.meta).ticketId!==ticketId) return;
+    const t=typeText(e);
+    if(t.includes("티켓구매")) buyOrders++;
+    if(t.includes("티켓판매")) sellOrders++;
+  });
+  return {buyOrders,sellOrders};
+}
+function ticketBaseFromAverage(ticketId,averageHolding){
+  if(ticketId==="personalClean") return n(averageHolding)/5;
+  if(ticketId==="playHour") return n(averageHolding)*3;
+  return n(averageHolding);
+}
+function previousTicketClose(ticketId,day=today()){
+  const rows=economyHistoryRows(null, false).filter(r=>r.day<day && r.ticketPrices?.[ticketId]);
+  const last=rows[rows.length-1];
+  return n(last?.ticketPrices?.[ticketId]?.close || last?.ticketPrices?.[ticketId]?.buy || 0);
+}
+function calculateTicketPrice(ticketId,baseStats=classEconomyStatsBase(today())){
+  if(isTopDisplayTicket(ticketId)) return {base:5,close:5,open:5,high:5,low:5,change:0,changeRate:0,buyOrders:0,sellOrders:0,incomeCorrection:1,demandCorrection:1};
+  const day=baseStats.date || today();
+  const base=Math.max(1,ticketBaseFromAverage(ticketId,baseStats.averageHoldingPerStudent));
+  const averageIssued=recentIssuedIncomeAverage(day);
+  const incomeCorrection=clampNum(averageIssued>0 ? n(baseStats.issuedIncome)/averageIssued : 1,0.9,1.1);
+  const demand=ticketDemandCounts(ticketId,day);
+  const demandCorrection=clampNum(1+((demand.buyOrders-demand.sellOrders)/activeStudentCount())*0.3,0.85,1.2);
+  const temporary=base*incomeCorrection*demandCorrection;
+  const previous=previousTicketClose(ticketId,day) || base;
+  const close=money(clampNum(temporary,previous*0.8,previous*1.25));
+  const open=money(previous);
+  const change=money(close-open);
+  const changeRate=open>0 ? (change/open)*100 : 0;
+  return {
+    base:money(base),
+    open,
+    close,
+    high:Math.max(open,close),
+    low:Math.min(open,close),
+    change,
+    changeRate,
+    buyOrders:demand.buyOrders,
+    sellOrders:demand.sellOrders,
+    incomeCorrection,
+    demandCorrection
+  };
+}
+function currentEconomyStats(day=today()){
+  const base=classEconomyStatsBase(day);
+  const ticketPrices={};
+  Object.keys(ticketMeta).forEach(k=>{ ticketPrices[k]=calculateTicketPrice(k,base); });
+  return {...base,ticketPrices};
+}
+function ticketPriceInfo(k){return calculateTicketPrice(k,classEconomyStatsBase(today()))}
+function basePrice(k){return isTopDisplayTicket(k)?5:ticketPriceInfo(k).base}
+function ticketUnit(k){return 0}
 function ticketStoredDate(raw){
   const base=obj(raw);
   return String(base.date || base.DATE || base.day || "").slice(0,10);
@@ -310,34 +686,66 @@ function ticketData(k){
 function ticketSold(k){const t=ticketData(k); return clampNum(n(t.sold),0,Math.max(1,n(t.supply)))}
 function ticketBuy(k){
   if(isTopDisplayTicket(k)) return 5;
-  const d=ticketSold(k);
-  return money(basePrice(k)+ticketUnit(k)*d);
+  return ticketPriceInfo(k).close;
 }
 function ticketSell(k){
   if(isTopDisplayTicket(k)) return 5;
-  const d=ticketSold(k);
-  return money(basePrice(k)+ticketUnit(k)*Math.max(0,d-2));
+  return ticketPriceInfo(k).close;
 }
-function product(id){return obj(data.products)[id]}
+function snackDefaultForProduct(p){
+  const byId=SNACK_PRODUCT_DEFAULTS[p?.id];
+  if(byId) return byId;
+  return Object.values(SNACK_PRODUCT_DEFAULTS).find(x=>x.name===p?.name) || null;
+}
+function normalizeSnackProduct(p,id=""){
+  if(!p && !id) return null;
+  const base={id,...obj(p)};
+  const defaults=snackDefaultForProduct(base) || SNACK_PRODUCT_DEFAULTS[id];
+  if(!defaults) return base;
+  return {...defaults,...base,id:base.id||id,name:base.name||defaults.name};
+}
+function product(id){return normalizeSnackProduct(obj(data.products)[id],id)}
+function snackEconomyIndex(day=today()){
+  return money(currentEconomyStats(day).totalHoldings || 0);
+}
+function calculateSnackPrice(snack,economyIndex,defaultBaseEconomyIndex=100){
+  if(!snack) return 0;
+  if(snack.priceType==="fixed") return Math.round(Number(snack.fixedPrice ?? snack.price ?? 0));
+  if(snack.priceType==="economyIndex"){
+    const basePrice=Number(snack.basePrice ?? snack.price ?? 0);
+    const baseEconomyIndex=Number(snack.baseEconomyIndex ?? defaultBaseEconomyIndex);
+    const sensitivity=Number(snack.sensitivity ?? 1);
+    const safeEconomyIndex=Number(economyIndex);
+    if(!safeEconomyIndex || !baseEconomyIndex || baseEconomyIndex<=0) return Math.round(basePrice);
+    const rawPrice=basePrice*Math.pow(safeEconomyIndex/baseEconomyIndex,sensitivity);
+    const minPrice=Number(snack.minPrice ?? 1);
+    const maxPrice=snack.maxPrice!=null ? Number(snack.maxPrice) : Infinity;
+    return Math.round(Math.max(minPrice,Math.min(maxPrice,rawPrice)));
+  }
+  return Math.round(Number(snack.price ?? snack.fixedPrice ?? snack.basePrice ?? 0));
+}
+function calculateSnackWholesalePrice(snack,economyIndex){
+  const retailReferencePrice=calculateSnackPrice(snack,economyIndex);
+  const wholesaleRate=Number(snack?.wholesaleRate ?? 0.65);
+  return Math.round(retailReferencePrice*wholesaleRate);
+}
+function productPriceAtEconomyIndex(p,economyIndex){return calculateSnackPrice(normalizeSnackProduct(p),economyIndex)}
+function productPrice(p){return productPriceAtEconomyIndex(p,snackEconomyIndex())}
+function productWholesalePrice(p){return calculateSnackWholesalePrice(normalizeSnackProduct(p),snackEconomyIndex())}
+function publicPrice(p){return money(productPrice(p))}
+function publicPriceAtEconomyIndex(p,economyIndex){return money(productPriceAtEconomyIndex(p,economyIndex))}
 function productPriceAtIncome(p,income){
   if(!p) return 0;
-  if(p.kind==="fixed") return n(p.fixedPrice);
-  if(p.kind==="incomeDiv") return n(income)/Math.max(1,n(p.divisor));
-  if(p.kind==="secret") return n(p.secretWholesale);
-  return n(p.fixedPrice);
+  return productPriceAtEconomyIndex(p,income);
 }
-function productPrice(p){return productPriceAtIncome(p,data.previousIncome)}
-function publicPrice(p){return p?.kind==="secret" ? null : money(productPrice(p))}
-function publicPriceAtIncome(p,income){return p?.kind==="secret" ? null : money(productPriceAtIncome(p,income))}
-function ticketBaseAtIncome(k,income){return isTopDisplayTicket(k)?5:round10(n(income)*ticketBaseMultiplier(k))}
-function ticketUnitAtIncome(k,income){return isTopDisplayTicket(k)?0:Math.max(10,round10(ticketBaseAtIncome(k,income)*0.1))}
+function publicPriceAtIncome(p,income){return publicPriceAtEconomyIndex(p,income)}
+function ticketBaseAtIncome(k,income){return isTopDisplayTicket(k)?5:money(ticketBaseFromAverage(k,income))}
+function ticketUnitAtIncome(k,income){return 0}
 function ticketBuyAtIncome(k,income){
-  const d=ticketSold(k);
-  return money(ticketBaseAtIncome(k,income)+ticketUnitAtIncome(k,income)*d);
+  return ticketBaseAtIncome(k,income);
 }
 function ticketSellAtIncome(k,income){
-  const d=ticketSold(k);
-  return money(ticketBaseAtIncome(k,income)+ticketUnitAtIncome(k,income)*Math.max(0,d-2));
+  return ticketBaseAtIncome(k,income);
 }
 function studentOptions(selected=""){return `<option value="">학생 선택</option>` + students().map(s=>`<option value="${s.id}" ${s.id===selected?"selected":""}>${s.name}${studentJobName(s)?` (${studentJobName(s)})`:""}</option>`).join("")}
 function ticketOptions(){return Object.keys(ticketMeta).map(k=>`<option value="${k}">${ticketMeta[k].name}</option>`).join("")}
@@ -692,6 +1100,8 @@ function studentNavItems(){
     ["finance","은행","🏦"],
     ["industry","생산·제작","⚙"]
   ];
+  if(selectedStudent && pieceRateJobsForStudent(selectedStudent).length) items.push(["workClaims","직업 업무",""]);
+  if(selectedStudent && isCorporationAssignedStudent(selectedStudent)) items.push(["corporations","법인업무","▥"]);
   if(selectedStudent && specialRoleIdsForStudent(selectedStudent).length) items.push(["role","직업업무","⚖"]);
   items.push(
     ["visit","구경하기","◎"],
@@ -730,13 +1140,17 @@ function studentAppHeaderHtml(s,id){
 function bondSumOf(id){return arr(data.bonds).filter(b=>b.owner===id&&b.status==="active").reduce((a,b)=>a+n(b.principal),0)}
 function ticketValueOf(id){return Object.entries(obj(obj(data.ticketHoldings)[id])).reduce((sum,[k,q])=>sum+n(q)*ticketSell(k),0)}
 function inventoryValueOf(id){return Object.entries(obj(obj(data.inventories)[id])).reduce((sum,[pid,q])=>sum+n(q)*(publicPrice(product(pid)) ?? money(productPrice(product(pid)))),0)}
-function totalAssetsOf(id){return balanceOf(id)+n(obj(data.deposits)[id])+savingsValueOf(id)+bondSumOf(id)+ticketValueOf(id)+inventoryValueOf(id)}
+function totalAssetsOf(id){return balanceOf(id)+n(obj(data.deposits)[id])+savingsValueOf(id)+bondSumOf(id)+ticketValueOf(id)+inventoryValueOf(id)+corporateEquityValueOf(id)}
+function personalRankStudents(){
+  return students().filter(s=>!isCorporationAssignedStudent(s.id));
+}
 function rankOfStudent(id){
-  const sorted=students().map(s=>({id:s.id,v:totalAssetsOf(s.id)})).sort((a,b)=>b.v-a.v);
+  if(isCorporationAssignedStudent(id)) return "-";
+  const sorted=personalRankStudents().map(s=>({id:s.id,v:totalAssetsOf(s.id)})).sort((a,b)=>b.v-a.v);
   return sorted.findIndex(x=>x.id===id)+1 || "-";
 }
 function assetRankingRows(){
-  return students().map(s=>({
+  return personalRankStudents().map(s=>({
     id:s.id,
     name:s.name,
     cash:balanceOf(s.id),
@@ -745,6 +1159,7 @@ function assetRankingRows(){
     bonds:bondSumOf(s.id),
     inventory:inventoryValueOf(s.id),
     tickets:ticketValueOf(s.id),
+    corporate:corporateEquityValueOf(s.id),
     total:totalAssetsOf(s.id)
   })).sort((a,b)=>b.total-a.total);
 }
@@ -752,10 +1167,28 @@ function assetRankingTableHtml(limit=0){
   const rows=assetRankingRows();
   const shown=limit>0 ? rows.slice(0,limit) : rows;
   if(!shown.length) return `<p class="small">등록된 학생이 없습니다.</p>`;
-  return `<div class="scroll"><table class="rankTable"><thead><tr><th>순위</th><th>학생</th><th>신용도</th><th class="num">현금</th><th class="num">예금</th><th class="num">채권</th><th class="num">상품</th><th class="num">티켓</th><th class="num">총자산</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td><b>${i+1}위</b></td><td>${r.name}</td><td>${creditScorePill(r.id)}</td><td class="num">${won(r.cash)}</td><td class="num">${won(r.deposit)}</td><td class="num">${won(r.bonds)}</td><td class="num">${won(r.inventory)}</td><td class="num">${won(r.tickets)}</td><td class="num"><b>${won(r.total)}</b></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table class="rankTable"><thead><tr><th>순위</th><th>학생</th><th>신용도</th><th class="num">현금</th><th class="num">예금</th><th class="num">채권</th><th class="num">상품</th><th class="num">티켓</th><th class="num">법인주식</th><th class="num">총자산</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td><b>${i+1}위</b></td><td>${r.name}</td><td>${creditScorePill(r.id)}</td><td class="num">${won(r.cash)}</td><td class="num">${won(r.deposit)}</td><td class="num">${won(r.bonds)}</td><td class="num">${won(r.inventory)}</td><td class="num">${won(r.tickets)}</td><td class="num">${won(r.corporate)}</td><td class="num"><b>${won(r.total)}</b></td></tr>`).join("")}</tbody></table></div>`;
+}
+function corporationRankingRows(){
+  return corporations().map(c=>({
+    id:c.id,
+    name:c.name || c.id,
+    representative:studentName(c.representativeStudentId || c.representativeId || c.leaderId || ""),
+    cash:corporationCashBalance(c),
+    net:corporationNetAssetValue(c),
+    sharePrice:corporationOfficialSharePrice(c),
+    shareholders:Object.values(obj(c.shareholders)).filter(v=>n(v)>0).length,
+    members:corporationMembers(c).length
+  })).sort((a,b)=>b.net-a.net);
+}
+function corporationRankingTableHtml(limit=0){
+  const rows=corporationRankingRows();
+  const shown=limit>0 ? rows.slice(0,limit) : rows;
+  if(!shown.length) return `<p class="small">등록된 법인이 없습니다.</p>`;
+  return `<div class="scroll"><table class="rankTable corporationRankTable"><thead><tr><th>순위</th><th>법인</th><th>대표</th><th class="num">현금</th><th class="num">순자산</th><th class="num">공식 주가</th><th class="num">주주 수</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td><b>${i+1}위</b></td><td><b>${r.name}</b></td><td>${r.representative||"-"}</td><td class="num">${won(r.cash)}</td><td class="num"><b>${won(r.net)}</b></td><td class="num">${won(r.sharePrice)}</td><td class="num">${r.shareholders||r.members}명</td></tr>`).join("")}</tbody></table></div>`;
 }
 function dailyAssetCandles(id){
-  const led=arr(data.ledger).filter(e=>arr(e.lines).some(l=>l.account===id)).sort((a,b)=>(a.ts||"").localeCompare(b.ts||""));
+  const led=obj(derived.ledgerByAccount)[id] || [];
   const totalDelta=led.reduce((sum,e)=>sum+arr(e.lines).filter(l=>l.account===id).reduce((s,l)=>s+n(l.delta),0),0);
   let running=balanceOf(id)-totalDelta;
   const days={};
@@ -809,8 +1242,8 @@ function assetChartHtml(id){
 }
 function currentAssetPill(id){return `<span class="currentAssetPill">내 현재 총자산 ${won(totalAssetsOf(id))}</span>`}
 function assetBreakdown(id){
-  const cash=balanceOf(id), deposit=n(obj(data.deposits)[id]), savings=savingsValueOf(id), bonds=bondSumOf(id), inventory=inventoryValueOf(id), tickets=ticketValueOf(id);
-  return [{key:"cash",label:"현금",value:cash,color:"#2563eb"},{key:"deposit",label:"예금",value:deposit,color:"#10b981"},{key:"savings",label:"적금",value:savings,color:"#14b8a6"},{key:"bonds",label:"채권",value:bonds,color:"#7c3aed"},{key:"inventory",label:"상품",value:inventory,color:"#f97316"},{key:"tickets",label:"티켓 시세",value:tickets,color:"#f59e0b"}];
+  const cash=balanceOf(id), deposit=n(obj(data.deposits)[id]), savings=savingsValueOf(id), bonds=bondSumOf(id), inventory=inventoryValueOf(id), tickets=ticketValueOf(id), corporate=corporateEquityValueOf(id);
+  return [{key:"cash",label:"현금",value:cash,color:"#2563eb"},{key:"deposit",label:"예금",value:deposit,color:"#10b981"},{key:"savings",label:"적금",value:savings,color:"#14b8a6"},{key:"bonds",label:"채권",value:bonds,color:"#7c3aed"},{key:"inventory",label:"상품",value:inventory,color:"#f97316"},{key:"tickets",label:"티켓 시세",value:tickets,color:"#f59e0b"},{key:"corporate",label:"법인 주식",value:corporate,color:"#8b5cf6"}];
 }
 function assetPieHtml(id){
   const parts=assetBreakdown(id).filter(p=>p.value>0);
@@ -840,7 +1273,7 @@ function assetPieHtml(id){
 }
 
 function studentTodayIncome(id){
-  return arr(data.ledger)
+  return (obj(derived.ledgerByAccount)[id] || [])
     .filter(e=>e.day===today())
     .reduce((sum,e)=>sum+arr(e.lines).filter(l=>l.account===id && n(l.delta)>0).reduce((a,l)=>a+n(l.delta),0),0);
 }
@@ -852,11 +1285,13 @@ function studentAssetDeltaText(id){
 }
 function studentSummaryCardsHtml(id){
   const ticketValue=ticketValueOf(id);
+  const corpValue=corporateEquityValueOf(id);
   return `<div class="tabletStatGrid">
     <div class="tabletStat blue"><span>잔고</span><b>${won(balanceOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
     <div class="tabletStat green"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>안전 보관</em></div>
     <div class="tabletStat orange"><span>보유 티켓 가치</span><b>${won(ticketValue)}</b><em>현재 판매가 기준</em></div>
-    <div class="tabletStat purple"><span>오늘 소득</span><b>${won(studentTodayIncome(id))}</b><em>오늘 입금 합계</em></div>
+    <div class="tabletStat purple"><span>법인 지분 가치</span><b>${won(corpValue)}</b><em>공식 주가 기준</em></div>
+    <div class="tabletStat yellow"><span>오늘 소득</span><b>${won(studentTodayIncome(id))}</b><em>오늘 입금 합계</em></div>
   </div>`;
 }
 function studentRequestSummaryHtml(id,limit=5){
@@ -896,12 +1331,40 @@ function studentDashboardHeroHtml(id){
     </div>
   </div>`;
 }
+function corporateHoldingSummaryHtml(id){
+  const rows=studentCorporationShares(id);
+  if(!rows.length) return "보유 법인지분 없음";
+  return rows.map(({corporation:c,shares,value})=>`${c.name} ${shares}장(${shares}%, ${won(value)})${c.representativeStudentId===id?" · 대표":""}`).join(" / ");
+}
+function studentCorporationAssetTableHtml(id){
+  const rows=studentCorporationShares(id);
+  if(!rows.length) return `<p class="small">보유한 법인지분이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>법인</th><th class="num">보유 주식</th><th class="num">지분율</th><th class="num">공식 주가</th><th class="num">내 지분 가치</th><th>상태</th></tr></thead><tbody>${rows.map(({corporation:c,shares,value})=>`<tr><td><b>${c.name}</b></td><td class="num">${shares}장</td><td class="num">${shares}%</td><td class="num">${won(c.officialSharePrice)}</td><td class="num"><b>${won(value)}</b></td><td>${c.representativeStudentId===id?`<span class="pill green">대표</span>`:`<span class="pill blue">주주</span>`}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function studentEconomyIndexHtml(){
+  const stats=currentEconomyStats(today());
+  const rows=economyHistoryRows(null).filter(r=>r.day<today());
+  const prev=rows.length ? rows[rows.length-1] : null;
+  const diff=prev ? n(stats.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  const compareText=!prev ? "전날 데이터 없음" : !n(prev.totalHoldings) ? "-" : pct(rate);
+  return `<div class="section studentEconomyIndex">
+    <div class="head"><div><h2>우리 반 경제지수</h2><div class="sub">우리 반 전체가 가진 열매의 총합입니다.</div></div><button onclick="showEconomyHelp()">도움말</button></div>
+    <div class="studentEconomyIndexRow">
+      <div><span>현재 전체 열매</span><b>${won(stats.totalHoldings)}</b></div>
+      <div class="${diff>=0?'upText':'downText'}"><span>전날 대비</span><b>${compareText}</b></div>
+    </div>
+  </div>`;
+}
 function studentDashboardHtml(id){
   return `<div class="studentDashboard">
     ${studentDashboardHeroHtml(id)}
+    ${studentEconomyIndexHtml()}
+    ${fineNoticeHtml(id)}
     ${studentSummaryCardsHtml(id)}
     <div class="section creditAndWarningPanel">
-      <div class="head"><div><h2>신용도·경고 현황</h2><div class="sub">대출/카드 기능은 나중에 연결하고, 지금은 투자 활동 참고 지표로만 사용합니다.</div></div></div>
+      <div class="head"><div><h2>신용도·경고 현황</h2><div class="sub">대출/카드 기능은 나중에 연결하고, 지금은 투자 활동 참고 지표로만 사용합니다.</div></div><button onclick="showCreditHelp()">도움말</button></div>
       <div class="creditWarningGrid">${creditSummaryCard(id)}<div class="card"><h3>경고 기록</h3>${roleWarningRowsForStudent(id)}</div></div>
     </div>
     <div class="dashboardMainGrid">
@@ -913,14 +1376,19 @@ function studentDashboardHtml(id){
       <div class="section missionCard"><h2>오늘 할 일</h2><p>시장 판매글을 확인하고, 필요한 신청은 바로 넣어두세요.</p>${studentQuickActionsHtml(id)}</div>
     </div>
     <div class="section mergedAssetPanel">
-      <div class="head"><div><h2>재산현황</h2><div class="sub">현금, 예금, 채권, 상품, 티켓 시세를 대시보드에서 함께 확인합니다.</div></div><div class="assetRank">${rankOfStudent(id)}위</div></div>
+      <div class="head"><div><h2>재산현황</h2><div class="sub">현금, 예금, 채권, 상품, 티켓 시세, 법인지분을 대시보드에서 함께 확인합니다.</div></div><div class="assetRank">${rankOfStudent(id)}위</div></div>
       <div class="tabletStatGrid assetStatGrid">
         <div class="tabletStat blue"><span>총자산</span><b>${won(totalAssetsOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
         <div class="tabletStat green"><span>현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
         <div class="tabletStat purple"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>승인 후 출금</em></div>
         <div class="tabletStat orange"><span>채권</span><b>${won(bondSumOf(id))}</b><em>원금 기준</em></div>
         <div class="tabletStat yellow"><span>티켓 시세 가치</span><b>${won(ticketValueOf(id))}</b><em>현재 판매가 기준</em></div>
+        <div class="tabletStat purple"><span>법인 지분 가치</span><b>${won(corporateEquityValueOf(id))}</b><em>공식 주가 기준</em></div>
       </div>
+    </div>
+    <div class="section corporationAssetDashboardPanel">
+      <div class="head"><div><h2>보유 법인지분</h2><div class="sub">별도 법인 탭이 없어도 내 법인 주식은 재산으로 계산됩니다.</div></div></div>
+      ${studentCorporationAssetTableHtml(id)}
     </div>
     <div class="assetLayoutGrid">
       <div class="section"><div class="head"><div><h2>자산 구성</h2><div class="sub">내 재산이 어디에 들어 있는지 한눈에 봅니다.</div></div></div>${assetPieHtml(id)}</div>
@@ -928,6 +1396,7 @@ function studentDashboardHtml(id){
         <div class="card avatarMiniPanel">${avatarPreviewHtml(id)}</div>
         <p><b>보유 상품</b><br><span class="small">${inventoryHtml(id)}</span></p>
         <p><b>보유 티켓</b><br><span class="small">${ticketHtml(id)}</span></p>
+        <p><b>보유 법인지분</b><br><span class="small">${corporateHoldingSummaryHtml(id)}</span></p>
         <p><b>보유 아바타</b><br><span class="small">${avatarOwnedSummary(id)}</span></p>
         <p><b>적용 미니룸</b><br><span class="small">${selectedRoomTemplate(id)?.icon||"집"} ${selectedRoomTemplate(id)?.name||"없음"}</span></p>
       </div>
@@ -961,8 +1430,7 @@ function ticketHtml(id){
 
 
 function studentLedgerEntries(id,limit=30){
-  return arr(data.ledger)
-    .filter(e=>arr(e.lines).some(l=>l.account===id))
+  return [...(obj(derived.ledgerByAccount)[id] || [])]
     .sort((a,b)=>(b.ts||"").localeCompare(a.ts||""))
     .slice(0,limit)
     .map(e=>{
@@ -991,7 +1459,7 @@ function studentTaxDueForLedger(e,viewerId){
   return received>0 ? tax(received) : 0;
 }
 function allStudentLedgerHtml(limit=500){
-  const rows=arr(data.ledger).sort((a,b)=>(b.ts||"").localeCompare(a.ts||"")).slice(0,limit);
+  const rows=[...(derived.ledger || [])].sort((a,b)=>(b.ts||"").localeCompare(a.ts||"")).slice(0,limit);
   if(!rows.length) return `<p class="small">전체 거래 내역이 없습니다.</p>`;
   return `<div class="scroll recentLedger allLedger"><table><thead><tr><th>날짜</th><th>종류</th><th>내용</th><th>거래 내용</th></tr></thead><tbody>${rows.map(e=>`<tr>
     <td>${new Date(e.ts).toLocaleString("ko-KR")}</td>
@@ -1052,7 +1520,7 @@ function studentDetailHtml(id, readOnly=false){
 
 function studentDailyIncomeRows(id){
   const days={};
-  arr(data.ledger).forEach(e=>{
+  (obj(derived.ledgerByAccount)[id] || []).forEach(e=>{
     const day=e.day || (e.ts||"").slice(0,10) || "날짜 없음";
     const income=arr(e.lines).filter(l=>l.account===id && n(l.delta)>0).reduce((a,l)=>a+n(l.delta),0);
     if(income>0){
@@ -1088,6 +1556,7 @@ function assetStatusHtml(id){
         <div class="card avatarMiniPanel">${avatarPreviewHtml(id)}</div>
         <p><b>보유 상품</b><br><span class="small">${inventoryHtml(id)}</span></p>
         <p><b>보유 티켓</b><br><span class="small">${ticketHtml(id)}</span></p>
+        <p><b>보유 법인지분</b><br><span class="small">${corporateHoldingSummaryHtml(id)}</span></p>
         <p><b>보유 아바타</b><br><span class="small">${avatarOwnedSummary(id)}</span></p>
         <p><b>적용 미니룸</b><br><span class="small">${selectedRoomTemplate(id)?.icon||"집"} ${selectedRoomTemplate(id)?.name||"없음"}</span></p>
       </div>
@@ -1435,6 +1904,13 @@ function marketHtml(id){
     ${marketFilterHtml()}
     <div id="marketOthersList">${marketGroupedListingsHtml(others,id)}</div>
   </div>
+  <div class="section shareMarketInMarket">
+    <div class="head"><div><h2>법인 지분 시장</h2><div class="sub">내 법인 지분을 매도하거나 친구가 올린 법인 주식을 구매합니다.</div></div></div>
+    <div class="grid g2">
+      <div class="card"><h3>내 보유 법인지분 매도</h3>${studentCorporationHoldingsHtml(id)}</div>
+      <div class="card"><h3>현재 법인 주식 매물</h3>${shareMarketHtml(id)}</div>
+    </div>
+  </div>
   <div class="section">
     <div class="head"><div><h2>내 판매 목록</h2><div class="sub">판매 취소하면 맡겨둔 상품이나 티켓이 다시 돌아옵니다.</div></div></div>
     <div id="marketMineList" class="marketListStack">${mine.map(l=>marketListingCard(l,id)).join("") || `<p class="small">판매 중인 물건이 없습니다.</p>`}</div>
@@ -1476,7 +1952,8 @@ function productShopHtml(id){
         <button onclick="event.stopPropagation();showProductChart('${p.id}')">차트</button>
       </div>`).join('')}</div>
     </div>
-    <div class="section"><div class="head"><div><h2>내 구매 신청</h2><div class="sub">승인 대기 중인 신청을 확인하고 취소할 수 있습니다.</div></div></div>${myRequests(id)}</div>
+    ${studentHasRole(id,"snack_retailer")?snackRetailerPurchaseHtml(id):""}
+    <div class="section"><div class="head"><div><h2>내 요청</h2><div class="sub">승인 대기 중인 요청을 확인하고 취소할 수 있습니다.</div></div></div>${myRequests(id)}</div>
   </div>`;
 }
 function totalTicketStock(){return Object.keys(ticketMeta).reduce((sum,k)=>sum+ticketStock(k),0)}
@@ -1616,11 +2093,11 @@ function loanRowsHtml(id){
 }
 function creditLoanMultiplier(id){
   const g=creditScoreInfo(id).grade;
-  return g==="A"?1.2:g==="B"?1:g==="C"?0.8:g==="D"?0.5:0.25;
+  return g==="S"?1.4:g==="A"?1.2:g==="B"?1:g==="C"?0.8:g==="D"?0.5:0.25;
 }
 function suggestedLoanRate(id){
   const g=creditScoreInfo(id).grade;
-  return g==="A"?3:g==="B"?5:g==="C"?8:g==="D"?12:18;
+  return g==="S"?2:g==="A"?3:g==="B"?5:g==="C"?8:g==="D"?12:18;
 }
 function loanLimitInfo(id){
   const asset=totalAssetsOf(id);
@@ -1651,41 +2128,207 @@ function bondMarketStudentHtml(id){
     </div>
   </div>`;
 }
-function bankStudentHtml(id){
+function bankbookTypes(){
+  return [
+    {id:"cash",name:"입출금통장",tone:"green",icon:"🌱",desc:"일상적인 거래와 자금 관리를 위한 통장입니다.",badge:"사용 가능"},
+    {id:"deposit",name:"예금통장",tone:"blue",icon:"🌳",desc:"목돈을 안전하게 보관하고 이자를 받는 통장입니다.",badge:`이자율 ${Math.round(n(data.settings.depositRate)*100)}%`},
+    {id:"saving",name:"적금통장",tone:"orange",icon:"💰",desc:"정기적으로 저축하여 목돈을 마련하는 통장입니다.",badge:"매주 복리"},
+    {id:"investment",name:"투자통장",tone:"purple",icon:"📊",desc:"티켓, 채권 등 투자 자산을 확인하는 통장입니다.",badge:"투자 가능"},
+    {id:"loan",name:"대출통장",tone:"red",icon:"🏠",desc:"대출을 관리하고 상환하는 통장입니다.",badge:"상환 관리"}
+  ];
+}
+function bankbookById(id){return bankbookTypes().find(b=>b.id===id) || bankbookTypes()[0]}
+function bankSummaryInfo(id){
+  const cash=balanceOf(id);
   const deposit=n(obj(data.deposits)[id]);
-  const savings=savingsSumOf(id);
+  const savings=savingsValueOf(id);
+  const ticket=ticketValueOf(id);
+  const bond=bondCurrentValueOf(id);
+  const corporate=corporateEquityValueOf(id);
   const debt=activeLoanBalance(id);
+  const unpaid=unpaidFinesForStudent(id).reduce((sum,f)=>sum+remainingFineAmount(f),0);
+  const totalAssets=money(cash+deposit+savings+ticket+bond+corporate);
+  const totalDebt=money(debt+unpaid);
+  return {cash,deposit,savings,ticket,bond,corporate,debt,unpaid,totalAssets,totalDebt,net:money(totalAssets-totalDebt)};
+}
+function bankSummaryCardsHtml(id){
+  const x=bankSummaryInfo(id);
+  return `<div class="tabletStatGrid bankSummaryGrid">
+    <div class="tabletStat blue"><span>사용 가능 금액</span><b>${won(x.cash)}</b><em>바로 사용 가능</em></div>
+    <div class="tabletStat green"><span>총자산</span><b>${won(x.totalAssets)}</b><em>예금 + 투자</em></div>
+    <div class="tabletStat orange"><span>총부채</span><b>${won(x.totalDebt)}</b><em>대출 + 미납금</em></div>
+    <div class="tabletStat purple"><span>순자산</span><b>${won(x.net)}</b><em>총자산 - 총부채</em></div>
+  </div>`;
+}
+function bankbookCoverHtml(book,selected=false){
+  return `<button class="bankbookRow ${selected?"selected":""}" onclick="setBankbook('${book.id}')">
+    <span class="bankbookCover bankbook-${book.tone}"><b>${book.name}</b><em>CLASS BANK</em><i>${book.icon}</i></span>
+    <span class="bankbookRowText"><strong>${book.name}</strong><small>${book.desc}</small><span class="pill ${book.tone==="red"?"orange":book.tone}">${book.badge}</span></span>
+    <span class="bankbookCheck" aria-hidden="true"><span>${selected?"✓":"›"}</span></span>
+  </button>`;
+}
+function bankbookSelectHtml(){
+  return `<div class="section bankbookSelectPanel">
+    <div class="head"><div><h2>통장 선택</h2><div class="sub">조회하거나 관리할 통장을 선택하세요.</div></div></div>
+    <div class="bankbookList">${bankbookTypes().map(b=>bankbookCoverHtml(b,false)).join("")}</div>
+  </div>`;
+}
+function bankbookTabsHtml(active){
+  return `<div class="bankbookTabs">${bankbookTypes().map(b=>`<button class="bankbookTab bankbookTab-${b.tone} ${b.id===active?"active":""}" onclick="setBankbook('${b.id}')"><span class="bankbookTabIcon">${b.icon}</span><span>${b.name}</span></button>`).join("")}</div>`;
+}
+function bankRequestHistoryHtml(id,types){
+  const list=arr(data.requests).filter(r=>r.studentId===id && types.includes(r.type)).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
+  if(!list.length) return `<p class="small">진행 중인 신청이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${new Date(r.ts).toLocaleString("ko-KR")}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+function bankbookLedgerTableHtml(id){
+  const rows=studentLedgerEntries(id,9999);
+  if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
+  const dates=[...new Set(rows.map(e=>(e.ts||"").slice(0,10)).filter(Boolean))];
+  const activeDate=(bankLedgerDateFilter && dates.includes(bankLedgerDateFilter)) ? bankLedgerDateFilter : "";
+  const filtered=activeDate ? rows.filter(e=>(e.ts||"").slice(0,10)===activeDate) : rows;
+  const totalPages=Math.max(1,Math.ceil(filtered.length/BANK_LEDGER_PAGE_SIZE));
+  if(bankLedgerPage>totalPages) bankLedgerPage=totalPages;
+  if(bankLedgerPage<1) bankLedgerPage=1;
+  const start=(bankLedgerPage-1)*BANK_LEDGER_PAGE_SIZE;
+  const pageRows=filtered.slice(start,start+BANK_LEDGER_PAGE_SIZE);
+  const options=`<option value="">전체 날짜</option>${dates.map(day=>`<option value="${day}" ${day===activeDate?"selected":""}>${day}</option>`).join("")}`;
+  return `<div class="bankbookLedgerControls">
+      <label>날짜별 보기</label>
+      <select class="bankbookFilterSelect" onchange="setBankLedgerDateFilter(this.value)">${options}</select>
+      <span class="small">${filtered.length}건</span>
+    </div>
+    <div class="bankbookLedger"><table><thead><tr><th>날짜</th><th>내용</th><th class="num">금액</th><th>세금</th></tr></thead><tbody>${pageRows.map(e=>{
+      const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
+      const day=e.ts ? new Date(e.ts).toLocaleDateString("ko-KR",{month:"2-digit",day:"2-digit"}).replace(/\.\s?/g,".").replace(/\.$/,"") : "-";
+      return `<tr><td>${day}</td><td>${e.desc||e.type||"-"}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td><td>${studentTaxPaidControl(e,id)}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    <div class="bankbookLedgerPager">
+      <button class="bankPagerBtn" onclick="changeBankLedgerPage(-1)" ${bankLedgerPage<=1?"disabled":""}>이전</button>
+      <span>${bankLedgerPage} / ${totalPages}</span>
+      <button class="bankPagerBtn" onclick="changeBankLedgerPage(1)" ${bankLedgerPage>=totalPages?"disabled":""}>다음</button>
+    </div>`;
+}
+function pendingTaxDueOf(id){
+  return (obj(derived.ledgerByAccount)[id] || []).reduce((sum,e)=>sum+studentTaxDueForLedger(e,id),0);
+}
+function openBankbookShellHtml(book,leftHtml,rightHtml,footerHtml=""){
+  return `<div class="section bankbookDetailPanel bankbookDetail-${book.tone}">
+    <div class="head bankbookDetailHead"><div><h2>${book.name}</h2><div class="sub">${book.desc}</div></div><button class="bankbookBackBtn" onclick="setBankbook('')">통장 선택으로</button></div>
+    ${bankbookTabsHtml(book.id)}
+    <div class="openBankbookPanel">
+      <div class="openBankbookPages">
+        <div class="bankbookPage left">${leftHtml}</div>
+        <div class="bankbookPage right">${rightHtml}</div>
+      </div>
+    </div>
+    ${footerHtml?`<div class="bankbookDetailFooter">${footerHtml}</div>`:""}
+  </div>`;
+}
+function cashBankbookHtml(id){
+  const book=bankbookById("cash");
+  const left=`<h3>입출금통장</h3><div class="bankbookBigValue"><div class="bankbookBigIcon">🍊</div><span>현재 현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
+    <div class="bankbookTransferBox"><div class="bankbookTransferIcon">🤝</div><strong>친구 송금</strong><small>친구에게 열매를 바로 보냅니다.</small>
+      <div class="bankbookTransferGrid"><select id="bankTransferTo">${studentOptions().replace(`<option value="${id}" ${id===id?"selected":""}>${studentName(id)}${studentJobName(student(id))?` (${studentJobName(student(id))})`:""}</option>`,"")}</select><input id="bankTransferAmount" type="number" min="1" value="10"></div>
+      <input id="bankTransferMemo" class="bankbookTransferMemo" placeholder="메모 예: 물건값, 간식값">
+      <button class="green bankbookTransferBtn" onclick="bankbookTransfer()">송금하기</button>
+    </div>`;
+  const right=`<h3>최근 거래 내역</h3>${bankbookLedgerTableHtml(id)}`;
+  return openBankbookShellHtml(book,left,right,``);
+}
+function depositBankbookHtml(id){
+  const book=bankbookById("deposit");
+  const deposit=n(obj(data.deposits)[id]);
+  const rate=savingsRate();
+  const left=`<h3>예금통장</h3><div class="bankbookMiniStats"><div><span>현재 예금 잔액</span><b>${won(deposit)}</b></div><div><span>이자율</span><b>${Math.round(rate*100)}%</b></div><div><span>다음 이자 지급일</span><b>교사 지급 시</b></div><div><span>예상 이자액</span><b>${won(deposit*rate)}</b></div></div>
+    <div class="bankbookForm"><div class="field"><label>예금 신청 금액</label><input id="reqDepositAmount" type="number" value="100"></div><div class="toolbar"><button class="blue" onclick="requestDepositIn()">예금 입금 신청</button><button class="green" onclick="requestDepositOut()">예금 출금 신청</button></div></div>`;
+  const right=`<h3>예금 신청/처리 내역</h3>${bankRequestHistoryHtml(id,["depositIn","depositOut"])}`;
+  return openBankbookShellHtml(book,left,right);
+}
+function savingBankbookHtml(id){
+  const book=bankbookById("saving");
+  const rows=activeSavings(id);
+  const next=rows[0]?.nextPayDate || rows[0]?.start || "-";
+  const expected=rows.reduce((sum,s)=>sum+Math.max(0,savingProjection(s).balance-n(s.totalPaid||0)),0);
+  const left=`<h3>적금통장</h3><div class="bankbookMiniStats"><div><span>현재 적금 평가액</span><b>${won(savingsValueOf(id))}</b></div><div><span>납입 주기</span><b>2일마다</b></div><div><span>다음 납입일</span><b>${next}</b></div><div><span>예상 이자액</span><b>${won(expected)}</b></div></div>
+    <div class="bankbookForm"><div class="field"><label>2일마다 납입할 금액</label><input id="reqSavingAmount" type="number" value="100"></div><div class="field"><label>기간</label><select id="reqSavingDays"><option value="21">3주</option><option value="28">4주</option><option value="35">5주</option></select></div><button class="orange" onclick="requestSavingStart()">적금 개설 신청</button></div>`;
+  const right=`<h3>납입 기록</h3>${savingsRowsHtml(id)}`;
+  return openBankbookShellHtml(book,left,right);
+}
+function investmentBankbookHtml(id){
+  const book=bankbookById("investment");
+  const hold=obj(obj(data.ticketHoldings)[id]);
+  const ticketRows=Object.keys(ticketMeta).filter(k=>n(hold[k])>0);
+  const ticketTable=ticketRows.length ? `<div class="scroll"><table><thead><tr><th>티켓</th><th class="num">수량</th><th class="num">현재가</th><th class="num">평가금액</th></tr></thead><tbody>${ticketRows.map(k=>`<tr><td>${ticketMeta[k].name}</td><td class="num">${n(hold[k])}</td><td class="num">${won(ticketSell(k))}</td><td class="num"><b>${won(n(hold[k])*ticketSell(k))}</b></td></tr>`).join("")}</tbody></table></div>` : `<p class="small">보유 티켓이 없습니다.</p>`;
+  const total=ticketValueOf(id)+bondCurrentValueOf(id);
+  const left=`<h3>투자통장</h3><div class="bankbookMiniStats"><div><span>보유 티켓 평가액</span><b>${won(ticketValueOf(id))}</b></div><div><span>채권 평가금액</span><b>${won(bondCurrentValueOf(id))}</b></div><div><span>투자 평가금액</span><b>${won(total)}</b></div><div><span>실현손익</span><b>거래 완료 기준</b></div></div><h3>보유 티켓</h3>${ticketTable}`;
+  const right=`<h3>보유 채권</h3>${activeBondRowsHtml(id)}<div class="small">평가손익은 현재 보유 자산 기준, 실현손익은 매도·만기 처리 후 거래내역에서 구분됩니다.</div>`;
+  return openBankbookShellHtml(book,left,right);
+}
+function loanBankbookHtml(id){
+  const book=bankbookById("loan");
   const limit=loanLimitInfo(id);
+  const loans=activeLoans(id);
+  const next=loans[0]?.due || "-";
+  const nextPay=loans[0] ? money(n(loans[0].amount)*(1+n(loans[0].rate)/100)) : 0;
+  const overdue=loans.some(l=>new Date((l.due||"")+"T00:00:00")<new Date(today()+"T00:00:00"));
+  const left=`<h3>대출통장</h3><div class="bankbookMiniStats"><div><span>대출 잔액</span><b>${won(limit.debt)}</b></div><div><span>대출 한도</span><b>${won(limit.gross)}</b></div><div><span>남은 대출 가능액</span><b>${won(limit.available)}</b></div><div><span>이자율</span><b>${suggestedLoanRate(id)}%</b></div><div><span>다음 상환일</span><b>${next}</b></div><div><span>다음 상환 예정액</span><b>${won(nextPay)}</b></div><div><span>연체 여부</span><b>${overdue?"연체":"정상"}</b></div><div><span>신용도</span><b>${creditScoreInfo(id).grade}</b></div></div>
+    ${loanLimitCardHtml(id)}<div class="bankbookForm"><div class="field"><label>신청 금액</label><input id="reqLoanAmount" type="number" value="${Math.min(100,limit.available)||0}" max="${limit.available}"></div><div class="field"><label>사용 목적</label><input id="reqLoanPurpose" placeholder="예: 투자 자금, 사업 준비"></div><button class="purple" onclick="requestLoanApply()">대출 신청</button></div>`;
+  const right=`<h3>대출 상환</h3>${creditScorePill(id)}${loanRowsHtml(id)}`;
+  return openBankbookShellHtml(book,left,right);
+}
+function bankbookDetailHtml(id,active){
+  if(active==="deposit") return depositBankbookHtml(id);
+  if(active==="saving") return savingBankbookHtml(id);
+  if(active==="investment") return investmentBankbookHtml(id);
+  if(active==="loan") return loanBankbookHtml(id);
+  return cashBankbookHtml(id);
+}
+function bankStudentHtml(id){
+  const valid=bankbookTypes().some(b=>b.id===selectedBankbook);
+  const active=valid ? selectedBankbook : "";
   return `<div class="financePage bankPage">
-    <div class="section">
-      <div class="head"><div><h2>은행</h2><div class="sub">예금, 적금, 대출을 관리합니다. 채권 투자는 상점·티켓 탭으로 이동했습니다.</div></div><div>${currentAssetPill(id)}</div></div>
-      <div class="tabletStatGrid">
-        <div class="tabletStat blue"><span>현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
-        <div class="tabletStat green"><span>예금</span><b>${won(deposit)}</b><em>이자율 ${Math.round(n(data.settings.depositRate)*100)}%</em></div>
-        <div class="tabletStat orange"><span>적금 평가액</span><b>${won(savings)}</b><em>매주 복리</em></div>
-        <div class="tabletStat purple"><span>대출 잔액</span><b>${won(debt)}</b><em>상환 예정액</em></div>
-      </div>
+    <div class="section bankHero">
+      <div class="head"><div><h2>은행</h2><div class="sub">예금, 적금, 대출을 관리합니다.</div></div><div>${currentAssetPill(id)}</div></div>
+      ${bankSummaryCardsHtml(id)}
     </div>
-    <div class="financeGrid">
-      <div class="section"><h2>예금 입금·출금</h2><p class="small">예금은 신청 후 승인되면 처리됩니다.</p><div class="field"><label>금액</label><input id="reqDepositAmount" type="number" value="100"></div><div class="toolbar"><button class="blue" onclick="requestDepositIn()">입금 신청</button><button class="green" onclick="requestDepositOut()">출금 신청</button></div></div>
-      <div class="section"><h2>적금 개설</h2><p class="small">개설 후 2일마다 정한 금액을 납입합니다. 일주일마다 예금금리만큼 매주 복리로 붙고, 중도해지 시 환급액은 0열매입니다.</p><div class="field"><label>2일마다 납입할 금액</label><input id="reqSavingAmount" type="number" value="100"></div><div class="field"><label>기간</label><select id="reqSavingDays"><option value="21">3주</option><option value="28">4주</option><option value="35">5주</option></select></div><div class="small">현재 적금 금리: 매주 ${Math.round(savingsRate()*100)}% 복리</div><button class="orange" onclick="requestSavingStart()">적금 개설 신청</button></div>
-    </div>
-    <div class="section"><div class="head"><div><h2>대출 신청</h2><div class="sub">DSR과 LTV를 기준으로 자동 한도가 정해집니다. 은행장이 금리를 정하고 승인합니다.</div></div>${creditScorePill(id)}</div>${loanLimitCardHtml(id)}
-      <div class="grid g2" style="margin-top:12px">
-        <div class="field"><label>신청 금액</label><input id="reqLoanAmount" type="number" value="${Math.min(100,limit.available)||0}" max="${limit.available}"></div>
-        <div class="field"><label>사용 목적</label><input id="reqLoanPurpose" placeholder="예: 투자 자금, 사업 준비"></div>
-      </div>
-      <button class="purple" onclick="requestLoanApply()">대출 신청</button>
-    </div>
-    <div class="financeGrid">
-      <div class="section"><div class="head"><div><h2>내 적금</h2><div class="sub">2일마다 납입하고, 매주 복리 이자가 붙습니다. 중도해지는 환급액 0열매입니다.</div></div></div>${savingsRowsHtml(id)}</div>
-      <div class="section"><div class="head"><div><h2>내 대출</h2><div class="sub">상환액은 원금+이자입니다.</div></div></div>${loanRowsHtml(id)}</div>
-    </div>
-    <div class="section"><div class="head"><div><h2>신청 내역</h2><div class="sub">은행 관련 신청을 확인합니다.</div></div></div>${myRequests(id)}</div>
+    ${active ? bankbookDetailHtml(id,active) : bankbookSelectHtml(id)}
   </div>`;
 }
 function financeStudentHtml(id){
   return bankStudentHtml(id);
+}
+
+window.setBankbook = function(id=""){
+  selectedBankbook = id;
+  bankLedgerDateFilter = "";
+  bankLedgerPage = 1;
+  render();
+}
+window.setBankLedgerDateFilter = function(value=""){
+  bankLedgerDateFilter = value || "";
+  bankLedgerPage = 1;
+  render();
+}
+window.changeBankLedgerPage = function(delta=0){
+  bankLedgerPage = Math.max(1, bankLedgerPage + Number(delta||0));
+  render();
+}
+window.payFirstPendingTax = async function(){
+  const id=selectedStudent;
+  const target=(obj(derived.ledgerByAccount)[id] || []).find(e=>studentTaxDueForLedger(e,id)>0);
+  if(!target) return toast("납부할 세금이 없습니다.");
+  await window.payMyLedgerTax(target.id);
+}
+window.bankbookTransfer = async function(){
+  const to=document.getElementById("bankTransferTo")?.value || "";
+  const amount=n(document.getElementById("bankTransferAmount")?.value);
+  const memo=(document.getElementById("bankTransferMemo")?.value || "친구 송금").trim() || "친구 송금";
+  if(!selectedStudent) return toast("학생 선택이 필요합니다.");
+  if(!to) return toast("받는 친구를 선택하세요.");
+  if(to===selectedStudent) return toast("나에게는 송금할 수 없습니다.");
+  if(amount<=0) return toast("송금액을 입력하세요.");
+  if(await doTransfer(selectedStudent,to,amount,memo)) toast("송금 완료");
 }
 
 function studentSettingsHtml(id){
@@ -1702,42 +2345,76 @@ function studentSettingsHtml(id){
 function firstProductPublicPrice(){ const p=arr(data.products)[0]; return p ? (publicPrice(p) ?? money(productPrice(p))) : 10; }
 function visitHtml(){
   const list=students();
-  return `<div class="section"><div class="head"><div><h2>재산 순위표</h2><div class="sub">현금+예금+채권+상품+티켓 기준입니다. 신용도도 함께 확인합니다.</div></div></div>${assetRankingTableHtml()}</div>
-  <div class="section"><div class="head"><div><h2>오늘의 거래 순위표</h2><div class="sub">세금 납부 표시가 된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
-  <div class="section"><div class="head"><div><h2>친구 구경</h2><div class="sub">친구들의 아바타, 직업, 신용도를 보고 탭하면 상세 재산현황을 확인합니다.</div></div></div>
-    <div class="galleryGrid">${list.map(s=>`<div class="card peerCard" onclick="showPeerInfo('${s.id}')"><h3>${s.name}</h3><div class="peerCreditLine">${creditScorePill(s.id)}<span class="pill orange">직무유기 ${dutyStage(s.id)}단계</span></div><div class="small"><b>직업</b> ${studentJobName(s)||"없음"}</div>${avatarPreviewHtml(s.id)}<div class="small">탭해서 재산현황 보기</div></div>`).join('')}</div>
+  return `<div class="visitPage">
+    <div class="section fullRankSection"><div class="head"><div><h2>개인 재산 순위</h2><div class="sub">학생 개인의 현금·예금·채권·상품·티켓·법인주식 기준입니다.</div></div></div>${assetRankingTableHtml()}</div>
+    <div class="section fullRankSection"><div class="head"><div><h2>법인 재산 순위</h2><div class="sub">등록된 법인의 순자산과 공식 주가 기준입니다.</div></div></div>${corporationRankingTableHtml()}</div>
+    <div class="section"><div class="head"><div><h2>오늘의 거래 순위표</h2><div class="sub">세금 납부 표시가 된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
+    <div class="section"><div class="head"><div><h2>친구 구경</h2><div class="sub">친구들의 아바타, 직업, 신용도를 보고 탭하면 자산 구성을 확인합니다.</div></div></div>
+      <div class="galleryGrid">${list.map(s=>`<div class="card peerCard" onclick="showPeerInfo('${s.id}')"><h3>${s.name}</h3><div class="peerCreditLine">${creditScorePill(s.id)}<span class="pill orange">직무유기 ${dutyStage(s.id)}단계</span></div><div class="small"><b>직업</b> ${studentJobName(s)||"없음"}</div>${avatarPreviewHtml(s.id)}<div class="small">탭해서 자산 구성 보기</div></div>`).join('')}</div>
+    </div>
   </div>`;
 }
-function marketSignal(){return todayY()>n(data.previousIncome)?"상승":todayY()<n(data.previousIncome)?"하락":"안정"}
-function marketHelp(){const diff=todayY()-n(data.previousIncome); return diff>0?`전날보다 ${won(diff)} 많음`:diff<0?`전날보다 ${won(Math.abs(diff))} 적음`:"전날과 비슷함"}
+function marketSignal(){
+  const rows=economyHistoryRows(2);
+  const diff=rows.length>=2 ? n(rows[rows.length-1].totalHoldings)-n(rows[rows.length-2].totalHoldings) : 0;
+  return diff>0?"상승":diff<0?"하락":"안정";
+}
+function marketHelp(){
+  const rows=economyHistoryRows(2);
+  const diff=rows.length>=2 ? n(rows[rows.length-1].totalHoldings)-n(rows[rows.length-2].totalHoldings) : 0;
+  return diff>0?`전날보다 ${won(diff)} 많음`:diff<0?`전날보다 ${won(Math.abs(diff))} 적음`:"전날과 비슷함";
+}
 function currentHistorySnapshot(){
-  const current={id:"now",at:now(),iso:new Date().toISOString(),previousIncome:n(data.previousIncome),todayIncome:todayY(),tickets:{},products:{}};
-  Object.keys(ticketMeta).forEach(k=>current.tickets[k]={base:basePrice(k),buy:ticketBuy(k),sell:ticketSell(k)});
+  const stats=currentEconomyStats(today());
+  const current={id:"now",at:now(),iso:new Date().toISOString(),previousIncome:n(data.previousIncome),todayIncome:todayY(),economyStats:stats,tickets:{},products:{}};
+  Object.keys(ticketMeta).forEach(k=>{
+    const info=stats.ticketPrices[k] || ticketPriceInfo(k);
+    current.tickets[k]={base:info.base,buy:info.close,sell:info.close,open:info.open,close:info.close,high:info.high,low:info.low,change:info.change,changeRate:info.changeRate,buyOrders:info.buyOrders,sellOrders:info.sellOrders};
+  });
   arr(data.products).forEach(p=>current.products[p.id]={price:money(productPrice(p)),publicPrice:publicPrice(p)});
   return current;
 }
 function fullHistoryWithNow(){
   return arr(data.history).sort((a,b)=>(a.iso||"").localeCompare(b.iso||"")).concat([currentHistorySnapshot()]);
 }
-function classCleanIncomeRows(limit=10){
+function economyStatsFromHistorySnapshot(x){
+  const stats=obj(x.economyStats || x.dailyEconomyStats);
+  const day=String(stats.date || (x.iso||"").slice(0,10) || x.day || "").slice(0,10);
+  if(!day || !stats || typeof stats!=="object" || !n(stats.totalHoldings)) return null;
+  return {
+    day,
+    totalHoldings:money(stats.totalHoldings),
+    liquidHoldings:money(stats.liquidHoldings),
+    lockedHoldings:money(stats.lockedHoldings),
+    issuedIncome:money(stats.issuedIncome ?? stats.issuedIncomeToday),
+    burnedAmount:money(stats.burnedAmount ?? stats.burnedAmountToday),
+    netChange:money(stats.netChange),
+    averageHoldingPerStudent:money(stats.averageHoldingPerStudent),
+    ticketPrices:obj(stats.ticketPrices)
+  };
+}
+function economyHistoryRows(limit=14, includeNow=true){
   const days={};
-  fullHistoryWithNow().forEach(x=>{
-    const day=(x.iso||"").slice(0,10)||today();
-    const hasTickets=Object.prototype.hasOwnProperty.call(x,"tickets");
-    const classCleanBase=x.tickets?.classClean?.base;
-    const value=classCleanBase!==undefined && classCleanBase!==null
-      ? money(classCleanBase)
-      : (!hasTickets && x.previousIncome!==undefined ? money(x.previousIncome) : 0);
-    if(value>0) days[day]={day,income:value};
+  Object.entries(obj(data.dailyEconomyStats)).forEach(([key,value])=>{
+    const r=economyStatsFromHistorySnapshot({day:key,economyStats:{date:key,...obj(value)}});
+    if(r) days[r.day]=r;
   });
+  arr(data.history).forEach(x=>{
+    const r=economyStatsFromHistorySnapshot(x);
+    if(r) days[r.day]=r;
+  });
+  if(includeNow){
+    const nowStats=currentEconomyStats(today());
+    days[today()]={day:today(),...nowStats};
+  }
   const rows=Object.values(days).sort((a,b)=>a.day.localeCompare(b.day));
   return limit ? rows.slice(-limit) : rows;
 }
-function totalIncomeLineChartHtml(limit=10){
-  const rows=classCleanIncomeRows(limit);
-  if(!rows.length) return `<p class="small">총소득 기록이 없습니다.</p>`;
-  const W=860,H=240,pad={l:72,r:26,t:24,b:54};
-  const vals=rows.map(r=>n(r.income));
+function totalHoldingsLineChartHtml(limit=14){
+  const rows=economyHistoryRows(limit);
+  if(!rows.length) return `<p class="small">전체 열매 보유량 기록이 아직 없습니다.</p>`;
+  const W=900,H=380,pad={l:92,r:34,t:30,b:70};
+  const vals=rows.map(r=>n(r.totalHoldings));
   let min=Math.min(...vals), max=Math.max(...vals);
   if(max===min){max+=1; min=Math.max(0,min-1);}
   const extra=(max-min)*0.12 || 1; min=Math.max(0,min-extra); max+=extra;
@@ -1749,12 +2426,18 @@ function totalIncomeLineChartHtml(limit=10){
     const val=max-range*i/4;
     return `<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" stroke="#e2e8f0"/><text x="${pad.l-10}" y="${yy+4}" text-anchor="end" font-size="12" fill="#64748b">${Math.round(val).toLocaleString("ko-KR")}</text>`;
   }).join("");
-  const points=rows.map((r,i)=>`${x(i)},${y(r.income)}`).join(" ");
+  const points=rows.map((r,i)=>`${x(i)},${y(r.totalHoldings)}`).join(" ");
   const area=`${pad.l},${H-pad.b} ${points} ${x(rows.length-1)},${H-pad.b}`;
   const labels=rows.map((r,i)=>`<text x="${x(i)}" y="${H-20}" text-anchor="middle" font-size="12" fill="#64748b">${r.day.slice(5).replace("-","/")}</text>`).join("");
-  const dots=rows.map((r,i)=>`<circle cx="${x(i)}" cy="${y(r.income)}" r="5" fill="#2563eb"><title>${r.day}\n전체 청소 면제권 기준가 ${won(r.income)}</title></circle>`).join("");
-  return `<div class="incomeLineChart clickableChart" onclick="showTotalIncomeChart()" title="전체 날짜 차트 보기"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<polygon points="${area}" fill="#dbeafe" opacity=".72"/><polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}</svg><div class="small">최근 ${rows.length}일 · 전체 청소 면제권 기준가를 총소득 지표로 사용합니다. 클릭하면 전체 날짜를 봅니다.</div></div>`;
+  const dots=rows.map((r,i)=>{
+    const prev=rows[i-1];
+    const diff=prev ? n(r.totalHoldings)-n(prev.totalHoldings) : 0;
+    const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+    return `<circle cx="${x(i)}" cy="${y(r.totalHoldings)}" r="6" fill="#2563eb"><title>${r.day}\n전체 열매: ${won(r.totalHoldings)}\n전날 대비: ${signedWon(diff)}\n등락률: ${pct(rate)}</title></circle>`;
+  }).join("");
+  return `<div class="incomeLineChart holdingsLineChart clickableChart" onclick="showTotalIncomeChart()" title="전체 날짜 차트 보기"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<polygon points="${area}" fill="#dbeafe" opacity=".72"/><polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}</svg><div class="small">최근 ${rows.length}일 전체 열매 보유량입니다. 클릭하면 전체 날짜를 봅니다.</div></div>`;
 }
+function totalIncomeLineChartHtml(limit=14){ return totalHoldingsLineChartHtml(limit); }
 
 async function addLedger(type, desc, lines, meta={}){
   const id = txid();
@@ -1770,8 +2453,9 @@ onValue(rootRef, async (snap)=>{
     const val = snap.val();
     if(!val){
       data = structuredClone(defaultData);
+      rebuildDerivedState();
       document.getElementById("status").innerHTML = `<b>Firebase 연결됨</b> <span class="pill orange">초기 데이터 생성 중</span>`;
-      render();
+      scheduleRender(0);
       try{
         await set(rootRef, defaultData);
         document.getElementById("status").innerHTML = `<b>Firebase 연결됨</b> <span class="pill green">기본 데이터 생성 완료</span>`;
@@ -1781,16 +2465,18 @@ onValue(rootRef, async (snap)=>{
       return;
     }
     data = mergeDefaults(defaultData, val);
+    rebuildDerivedState();
+    repairSnackProductDefaultsIfNeeded();
     document.getElementById("status").innerHTML = `<b>Firebase 연결됨</b> <span class="pill green">실시간 동기화 중</span>`;
     if(uiEditing){
       pendingRealtimeRender = true;
       return;
     }
-    render();
+    scheduleRender();
   }catch(e){
     console.error("Firebase callback error", e);
     document.getElementById("status").innerHTML = `<b>Firebase 데이터 처리 오류</b><div class="sub">${e.message}</div><p class="small">저장된 데이터 구조가 꼬였을 수 있습니다. 설정 탭의 티켓 구조 복구 또는 전체 초기화를 사용하세요.</p>`;
-    try{ data=mergeDefaults(defaultData, snap.val()||{}); render(); }catch(_){}
+    try{ data=mergeDefaults(defaultData, snap.val()||{}); rebuildDerivedState(); scheduleRender(); }catch(_){}
   }
 }, (err)=>{
   firebaseReady = true; window.__ECONOMY_FIREBASE_READY__ = true;
@@ -1803,6 +2489,24 @@ function setTab(tab){
   document.querySelectorAll(".tabPage").forEach(p=>p.classList.add("hidden"));
   document.getElementById(tab)?.classList.remove("hidden");
   document.querySelectorAll("#teacherTabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  if(mode==="teacher") renderTeacherTab(tab);
+}
+const teacherRenderers={
+  dashboard:["대시보드",renderDashboard],
+  students:["학생·잔고",renderStudentsPage],
+  transactions:["송금·지급·벌금",renderTransactions],
+  jobs:["직업·임금",renderJobs],
+  shop:["상품·상점",renderShop],
+  industry:["산업",renderIndustryTeacher],
+  corporations:["법인·주식",renderCorporations],
+  tickets:["티켓시장",renderTickets],
+  finance:["예금·채권",renderFinance],
+  ledger:["거래장부",renderLedger],
+  settings:["설정",renderSettings]
+};
+function renderTeacherTab(tab=currentTab){
+  const item=teacherRenderers[tab] || teacherRenderers.dashboard;
+  safeRender(item[0],item[1]);
 }
 function safeRender(name, fn){
   try { fn(); }
@@ -1820,18 +2524,14 @@ function render(){
   teacherTabsEl.classList.toggle("hidden",mode!=="teacher");
   teacherViewEl.classList.toggle("hidden",mode!=="teacher");
   studentViewEl.classList.toggle("hidden",mode!=="student");
-  safeRender("대시보드", renderDashboard);
-  safeRender("학생·잔고", renderStudentsPage);
-  safeRender("송금·지급·벌금", renderTransactions);
-  safeRender("직업·임금", renderJobs);
-  safeRender("상품·상점", renderShop);
-  safeRender("산업", renderIndustryTeacher);
-  safeRender("티켓시장", renderTickets);
-  safeRender("예금·채권", renderFinance);
-  safeRender("거래장부", renderLedger);
-  safeRender("설정", renderSettings);
-  safeRender("학생화면", renderStudentView);
-  if(mode==="teacher") setTab(currentTab);
+  if(mode==="teacher"){
+    renderTeacherTab(currentTab);
+    document.querySelectorAll(".tabPage").forEach(p=>p.classList.add("hidden"));
+    document.getElementById(currentTab)?.classList.remove("hidden");
+    document.querySelectorAll("#teacherTabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));
+  }else{
+    safeRender("학생화면", renderStudentView);
+  }
 }
 
 
@@ -1843,6 +2543,34 @@ function oldRequestNoticeHtml(){
   const old=oldRequests(24);
   return old.length?`<div class="expireNotice"><b>오래된 신청 ${old.length}개</b>가 있습니다. 24시간이 지난 신청은 현재 잔고/재고와 맞지 않을 수 있으니 정리하는 것을 권장합니다.</div>`:"";
 }
+function economyIndexCardHtml(){
+  const rows=economyHistoryRows(2);
+  const stats=currentEconomyStats(today());
+  const prev=rows.length>=2 ? rows[rows.length-2] : null;
+  const diff=prev ? n(stats.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  const trendClass=diff>=0?"up":"down";
+  return `<div class="economyIndexGrid">
+    <div class="economyIndexHero ${trendClass}">
+      <div class="economyIndexLabel">우리 반 경제지수</div>
+      <div class="economyIndexValue">${won(stats.totalHoldings)}</div>
+      <div class="economyIndexDelta"><b>${diff>=0?"▲":"▼"} ${signedWon(diff)}</b><span>${pct(rate)}</span></div>
+      <button class="helpBtn" onclick="showEconomyHelp()">도움말</button>
+    </div>
+    <div class="economyMiniStats">
+      <div class="stat blue"><div class="label">바로 쓸 수 있는 열매</div><div class="value">${won(stats.liquidHoldings)}</div><div class="help">지갑 + 단체 현금</div></div>
+      <div class="stat purple"><div class="label">묶여 있는 열매</div><div class="value">${won(stats.lockedHoldings)}</div><div class="help">예금 + 적금 + 채권</div></div>
+      <div class="stat green"><div class="label">오늘 새로 풀린 열매</div><div class="value">${won(stats.issuedIncome)}</div><div class="help">지급·임금·이자</div></div>
+      <div class="stat red"><div class="label">오늘 사라진 열매</div><div class="value">${won(stats.burnedAmount)}</div><div class="help">세금·벌금·구매</div></div>
+    </div>
+  </div>`;
+}
+function economyChartPanelHtml(){
+  return `<div class="section economyChartSection">
+    <div class="head"><div><h2>전체 열매 보유량 변화</h2><div class="sub">총소득 대신 우리 반 전체가 가진 열매 총합을 추적합니다.</div></div><div class="toolbar"><button onclick="showTotalIncomeChart(7)">7일</button><button class="blue" onclick="showTotalIncomeChart(14)">14일</button><button onclick="showTotalIncomeChart(30)">30일</button></div></div>
+    ${totalHoldingsLineChartHtml(14)}
+  </div>`;
+}
 
 function renderDashboard(){
   const totalCash=students().reduce((a,s)=>a+balanceOf(s.id),0);
@@ -1850,21 +2578,16 @@ function renderDashboard(){
   const activeBonds=arr(data.bonds).filter(b=>b.status==="active");
   document.getElementById("dashboard").innerHTML = `
     <div class="section">
-      <div class="head"><div><h2>경제 현황판</h2><div class="sub">오늘 총소득과 시장 상태입니다.</div></div><span class="pill blue">Y = G - T</span></div>
-      <div class="grid g5">
-        <div class="stat blue"><div class="label">오늘 G 지급</div><div class="value">${won(todayG())}</div><div class="help">새로 풀린 열매</div></div>
-        <div class="stat green"><div class="label">오늘 T 회수</div><div class="value">${won(todayT())}</div><div class="help">회수된 열매</div></div>
-        <div class="stat orange"><div class="label">오늘 총소득 Y</div><div class="value">${won(todayY())}</div><div class="help">G - T</div></div>
-        <div class="stat purple"><div class="label">전날 총소득</div><div class="value">${won(data.previousIncome)}</div><div class="help">가격 기준</div></div>
-        <div class="stat red"><div class="label">시장 신호</div><div class="value">${marketSignal()}</div><div class="help">${marketHelp()}</div></div>
-      </div>
+      <div class="head"><div><h2>경제 현황판</h2><div class="sub">대표 지표를 총소득이 아니라 전체 열매 보유량으로 봅니다.</div></div><span class="pill blue">전체 보유량 기준</span></div>
+      ${economyIndexCardHtml()}
       <div class="toolbar">
-        <button class="primary" onclick="applyTodayAsPrevious()">오늘 총소득을 전날 총소득으로 적용</button>
+        <button class="primary" onclick="applyTodayAsPrevious()">오늘 경제기록 저장</button>
         <button class="blue" onclick="recordSnapshot()">가격 기록 저장</button>
         <button class="orange" onclick="cleanOldRequests()">오래된 신청 정리</button>
       </div>
       ${oldRequestNoticeHtml()}
     </div>
+    ${economyChartPanelHtml()}
     <div class="section">
       <div class="grid g4">
         <div class="stat blue"><div class="label">학생 수</div><div class="value">${students().length}명</div></div>
@@ -1873,7 +2596,7 @@ function renderDashboard(){
         <div class="stat orange"><div class="label">활성 채권</div><div class="value">${activeBonds.length}개</div></div>
       </div>
     </div>
-    <div class="section"><div class="head"><div><h2>재산 순위표</h2><div class="sub">현금+예금+채권+상품+티켓 기준입니다.</div></div></div>${assetRankingTableHtml()}</div>
+    <div class="section"><div class="head"><div><h2>재산 순위표</h2><div class="sub">현금+예금+채권+상품+티켓+법인주식 기준입니다.</div></div></div>${assetRankingTableHtml()}</div>
     <div class="section"><div class="head"><div><h2>오늘 거래왕</h2><div class="sub">세금 납부/거래 인정된 학생 간 거래 기준입니다.</div></div></div>${tradeKingTableHtml()}</div>
     <div class="section"><div class="head"><div><h2>승인 대기 신청</h2><div class="sub">학생이 올린 신청입니다.</div></div></div>${requestTable()}</div>
   `;
@@ -1967,7 +2690,9 @@ function renderStudentsPage(){
       <div class="scroll"><table><thead><tr><th>이름</th><th>직업</th><th>PIN</th><th class="num">현금</th><th class="num">예금</th><th>티켓</th><th>관리</th></tr></thead><tbody>
       ${students().map(s=>studentRow(s)).join("") || `<tr><td colspan="7">학생 없음</td></tr>`}
       </tbody></table></div>
-    </div>`;
+    </div>
+    ${approvedWorkClaimsPayoutHtml()}
+    ${taxOfficeTeacherWageHtml()}`;
 }
 function studentRow(s){
   const tickets=Object.keys(ticketMeta).map(k=>`${ticketMeta[k].name.replace(" 면제권","").replace("1시간 ","")} ${n(obj(obj(data.ticketHoldings)[s.id])[k])}`).join(" / ");
@@ -1998,6 +2723,66 @@ function studentHasJob(s,jobId){return studentJobIds(s).includes(jobId)}
 function studentHasRole(id,roleId){return studentHasJob(student(id),roleId)}
 function specialRoleIdsForStudent(id){return ["police","tax_office","referee","banker"].filter(roleId=>studentHasRole(id,roleId))}
 function specialRoleName(roleId){return {police:"경찰",tax_office:"국세청",referee:"심판",banker:"은행장"}[roleId]||roleId}
+function workClaims(){return arr(data.workClaims).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""))}
+function claimStatusText(status){
+  return {pending:"심사 대기",approved:"승인됨",rejected:"거부됨",held:"보류됨",paid:"지급 완료"}[status] || status || "-";
+}
+function isPieceRateJob(j){
+  const pay=String(j?.payType||"");
+  return !!j && (j.isPieceRate || j.requiresReview || pay.includes("건당"));
+}
+function pieceRateJobsForStudent(studentId){
+  const s=student(studentId);
+  return studentJobIds(s).map(job).filter(isPieceRateJob);
+}
+function jobWageRulesForJob(jobId){
+  const rules=arr(data.jobWageRules).filter(r=>r.jobId===jobId || r.jobName===job(jobId)?.name);
+  if(rules.length) return rules.filter(r=>r.isPieceRate!==false && r.requiresReview!==false);
+  const j=job(jobId);
+  if(!isPieceRateJob(j)) return [];
+  return [{id:`${jobId}_default`,jobId,jobName:j.name,workType:"default",workTypeName:j.name+" 업무",wage:money(j.wage),isPieceRate:true,requiresReview:true}];
+}
+function pieceRateWorkRulesForStudent(studentId){
+  return pieceRateJobsForStudent(studentId).flatMap(j=>jobWageRulesForJob(j.id).map(r=>({...r,jobId:j.id,jobName:j.name})));
+}
+function workRuleByClaim(c){
+  return jobWageRulesForJob(c.jobId).find(r=>String(r.workType||r.id||"default")===String(c.workType||"default")) || null;
+}
+function workRuleSelectOptions(studentId){
+  const rows=pieceRateWorkRulesForStudent(studentId);
+  if(!rows.length) return `<option value="">건당 지급 업무 없음</option>`;
+  return rows.map(r=>`<option value="${r.jobId}::${r.workType||r.id||"default"}">${r.jobName} - ${r.workTypeName||r.name||"업무"} (${won(r.wage)})</option>`).join("");
+}
+function workClaimsForStudent(studentId){return workClaims().filter(c=>c.studentId===studentId)}
+function approvedUnpaidClaims(){return workClaims().filter(c=>c.status==="approved" && c.paid!==true && money(c.approvedWage)>0)}
+function sameDay(isoOrDay,day=today()){return String(isoOrDay||"").slice(0,10)===day}
+function taxOfficeWageEstimate(officerId,day=today()){
+  const reviewed=workClaims().filter(c=>c.reviewedBy===officerId && ["approved","rejected","held","paid"].includes(c.status) && sameDay(c.reviewedAt,day));
+  const collections=ledgerForDay(day).filter(e=>obj(e.meta).taxAudited && obj(e.meta).officer===officerId);
+  const collectedTaxAmount=collections.reduce((sum,e)=>sum+n(obj(e.meta).tax)+n(obj(e.meta).centralTax),0);
+  const reviewPay=reviewed.length*2;
+  const collectionPay=collections.length*5;
+  const bonus=Math.min(money(collectedTaxAmount*0.1),20);
+  return {day,reviewedClaimsCount:reviewed.length,collectedTaxCasesCount:collections.length,collectedTaxAmount,reviewPay,collectionPay,bonus,total:money(reviewPay+collectionPay+bonus)};
+}
+function taxOfficeWageRecordId(officerId,day=today()){return `${officerId}_${day}`}
+function isCorporationJobId(jobId){
+  const j=job(jobId);
+  const key=String(jobId||"").toLocaleLowerCase("ko-KR");
+  const name=String(j?.name||"").toLocaleLowerCase("ko-KR");
+  return key==="corporation" || key==="corp" || key==="company" || key.includes("corporation") || name.includes("법인") || name.includes("회사");
+}
+function isCorporationAssignedStudent(id){
+  const s=student(id);
+  if(!s) return false;
+  if(s.isCorporationAccount===true || s.isCorporation===true || s.accountType==="corporation") return true;
+  if(s.corporationId && String(s.corporationId)===String(id)) return true;
+  if(corporationRaw(id)) return true;
+  const jobText=String(s.job||"").replace(/\s+/g,"").toLocaleLowerCase("ko-KR");
+  if(jobText.includes("법인") || jobText.includes("회사") || jobText.includes("corporation") || jobText.includes("corp")) return true;
+  if(studentJobIds(s).some(isCorporationJobId)) return true;
+  return corporations().some(c=>String(c.id)===String(id) || String(c.cashAccountId||"")===String(id) || String(c.accountId||"")===String(id));
+}
 function roleWarnings(){return arr(data.roleWarnings).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""))}
 function activeWarningsForStudent(id,source=""){
   return roleWarnings().filter(w=>w.targetId===id && w.status!=="cancelled" && (!source || w.source===source));
@@ -2019,39 +2804,51 @@ function dutyWageMultiplier(id){
 }
 function recentIncomeOf(id,days=7){
   const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-days+1);
-  return arr(data.ledger).filter(e=>{
+  return (obj(derived.ledgerByAccount)[id] || []).filter(e=>{
     const d=new Date((e.ts||"").slice(0,10)+"T00:00:00");
     return !Number.isNaN(+d) && d>=cutoff;
   }).reduce((sum,e)=>sum+arr(e.lines).filter(l=>l.account===id && n(l.delta)>0).reduce((a,l)=>a+n(l.delta),0),0);
 }
 function taxAuditPenaltyCount(id){
-  return arr(data.ledger).filter(e=>obj(e.meta).taxAudited && arr(e.lines).some(l=>l.account===id && n(l.delta)<0)).length;
+  return (obj(derived.ledgerByAccount)[id] || []).filter(e=>obj(e.meta).taxAudited && arr(e.lines).some(l=>l.account===id && n(l.delta)<0)).length;
 }
 function creditScoreInfo(id){
   const asset=totalAssetsOf(id);
   const income=recentIncomeOf(id,7);
-  const warnings=warningCountForStudent(id);
+  const warningsRows=activeWarningsForStudent(id);
+  const now=Date.now();
+  const daysAgo=(iso)=>{ const t=new Date(iso||0).getTime(); return Number.isNaN(t) ? 9999 : (now-t)/(24*60*60*1000); };
+  const recentWarnings=warningsRows.filter(w=>daysAgo(w.ts)<=14).length;
+  const oldWarnings=Math.max(0,warningsRows.length-recentWarnings);
   const stage=dutyStage(id);
   const audits=taxAuditPenaltyCount(id);
   const debt=activeLoanBalance(id);
-  const assetBonus=Math.min(15, Math.floor(asset/300));
-  const incomeBonus=Math.min(10, Math.floor(income/200));
-  const debtPenalty=Math.min(15, Math.floor(debt/300));
-  let score=70;
-  score += assetBonus;
-  score += incomeBonus;
-  score -= warnings*4;
-  score -= stage*7;
-  score -= audits*8;
-  score -= debtPenalty;
-  score=Math.max(0,Math.min(100,Math.round(score)));
-  const grade=score>=90?"A":score>=80?"B":score>=65?"C":score>=50?"D":"위험";
-  const reason=`자산 +${assetBonus}, 최근소득 +${incomeBonus}, 경고 -${warnings*4}, 직무유기 -${stage*7}, 세금적발 -${audits*8}, 대출부담 -${debtPenalty}`;
-  return {score,grade,reason,asset,income,warnings,stage,audits,debt};
+  const unpaidRows=unpaidFinesForStudent(id);
+  const overdueFines=unpaidRows.filter(f=>fineEffectiveStatus(f)==="overdue").length;
+  const unpaidFineTotal=unpaidRows.reduce((sum,f)=>sum+remainingFineAmount(f),0);
+  const paidFineCount=fineRowsForStudent(id).filter(f=>fineEffectiveStatus(f)==="paid").length;
+  const lastWarningAge=warningsRows.length ? Math.min(...warningsRows.map(w=>daysAgo(w.ts))) : 9999;
+  let recoveryBonus=0;
+  if(lastWarningAge>=3) recoveryBonus+=15;
+  if(lastWarningAge>=7) recoveryBonus+=25;
+  if(lastWarningAge>=14) recoveryBonus+=40;
+  recoveryBonus+=Math.min(30,paidFineCount*5);
+  const assetBonus=Math.min(80, Math.floor(asset/250));
+  const incomeBonus=Math.min(50, Math.floor(income/250));
+  const warningPenalty=recentWarnings*25 + oldWarnings*8;
+  const dutyPenalty=stage*45;
+  const auditPenalty=audits*45;
+  const debtPenalty=Math.min(90, Math.floor(debt/80));
+  const finePenalty=unpaidRows.length*25 + overdueFines*35 + Math.min(120,Math.floor(unpaidFineTotal/15));
+  let score=700 + assetBonus + incomeBonus + recoveryBonus - warningPenalty - dutyPenalty - auditPenalty - debtPenalty - finePenalty;
+  score=Math.max(300,Math.min(1000,Math.round(score)));
+  const grade=score>=900?"S":score>=800?"A":score>=700?"B":score>=600?"C":score>=500?"D":"E";
+  const reason=`자산 +${assetBonus}, 최근소득 +${incomeBonus}, 성실회복 +${recoveryBonus}, 최근경고 -${recentWarnings*25}, 오래된경고 -${oldWarnings*8}, 직무유기 -${dutyPenalty}, 세금적발 -${auditPenalty}, 대출부담 -${debtPenalty}, 미납벌금 -${finePenalty}`;
+  return {score,grade,reason,asset,income,warnings:warningsRows.length,recentWarnings,oldWarnings,stage,audits,debt,overdueFines,unpaidFineTotal,recoveryBonus};
 }
 function creditScorePill(id){
   const c=creditScoreInfo(id);
-  const cls=c.score>=80?"green":c.score>=65?"blue":c.score>=50?"orange":"red";
+  const cls=c.score>=800?"green":c.score>=700?"blue":c.score>=600?"orange":"red";
   return `<span class="pill ${cls}" title="${c.reason}">신용 ${c.grade} · ${c.score}점</span>`;
 }
 function creditSummaryCard(id){
@@ -2062,6 +2859,36 @@ function roleWarningRowsForStudent(id){
   const rows=activeWarningsForStudent(id).slice(0,8);
   if(!rows.length) return `<p class="small">받은 경고가 없습니다.</p>`;
   return `<div class="roleWarningMiniList">${rows.map(w=>`<div><b>${specialRoleName(w.source)} 경고</b><span>${w.reason||"사유 없음"}</span><em>${w.status==="appealed"?"이의신청 중":w.status==="upheld"?"유지":"진행"}</em>${w.appealable && w.status==="issued"?`<button onclick="appealRoleWarning('${w.id}')">이의신청</button>`:""}</div>`).join("")}</div>`;
+}
+function fineNoticeHtml(id){
+  const rows=unpaidFinesForStudent(id);
+  if(!rows.length) return "";
+  const total=rows.reduce((sum,f)=>sum+remainingFineAmount(f),0);
+  return `<div class="section fineNoticePanel">
+    <div class="head"><div><h2>미납 벌금 고지서</h2><div class="sub">벌금은 경고 2회가 된 순간의 재산 기준으로 이미 확정됩니다.</div></div><span class="pill red">미납 ${won(total)}</span></div>
+    <div class="fineNoticeList">${rows.map(f=>{
+      const snap=obj(f.assetSnapshot);
+      const remain=remainingFineAmount(f);
+      const status=fineEffectiveStatus(f);
+      return `<div class="fineNoticeCard ${status}">
+        <div class="fineNoticeTop"><div><b>${f.reason||"벌금"}</b><span>${status==="overdue"?"납부기한 지남":status==="partial"?"부분 납부":"미납"}</span></div><strong>${won(remain)}</strong></div>
+        <div class="fineNoticeMeta">총 벌금 ${won(f.fineAmount)} · 납부 ${won(f.paidAmount)} · 기한 ${f.dueDate||"-"}</div>
+        <div class="fineSnapshotGrid">
+          <span>현금 ${won(snap.personalCash)}</span><span>예금 ${won(snap.deposits)}</span><span>적금 ${won(snap.savings)}</span><span>채권 ${won(snap.bonds)}</span><span>티켓 ${won(snap.ticketsValue)}</span><span>법인주식 ${won(snap.corporateEquityValue)}</span>
+        </div>
+        <p class="small">벌금은 경고 2회가 된 순간의 재산을 기준으로 정해집니다. 나중에 돈을 다른 곳으로 옮겨도 벌금은 줄어들지 않습니다. 법인에 넣어둔 열매도 내 주식 지분만큼은 내 재산으로 계산됩니다.</p>
+        <div class="toolbar"><button class="danger" onclick="payFineNotice('${f.id}')">잔고로 납부</button>${balanceOf(id)<remain?`<span class="pill orange">잔고 부족: 부분 납부 가능</span>`:""}</div>
+      </div>`;
+    }).join("")}</div>
+  </div>`;
+}
+function fineAdminTableHtml(){
+  const rows=arr(data.fines).sort((a,b)=>(b.issuedAt||"").localeCompare(a.issuedAt||"")).slice(0,50);
+  if(!rows.length) return `<p class="small">발행된 벌금 고지서가 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>학생</th><th>사유</th><th class="num">벌금</th><th class="num">납부</th><th class="num">남은 금액</th><th>기한</th><th>상태</th></tr></thead><tbody>${rows.map(f=>{
+    const status=fineEffectiveStatus(f);
+    return `<tr><td>${studentName(f.studentId)}</td><td>${f.reason||"-"}</td><td class="num">${won(f.fineAmount)}</td><td class="num">${won(f.paidAmount)}</td><td class="num"><b>${won(remainingFineAmount(f))}</b></td><td>${f.dueDate||"-"}</td><td><span class="pill ${status==="paid"?"green":status==="overdue"?"red":status==="partial"?"orange":"blue"}">${status}</span></td></tr>`;
+  }).join("")}</tbody></table></div>`;
 }
 
 function assignedStudentsForJob(jobId){return students().filter(s=>studentHasJob(s,jobId))}
@@ -2096,7 +2923,7 @@ function studentJobAssignmentRows(){
 
 function roleAdminPanelHtml(){
   return `<div class="roleAdminGrid">
-    <div class="card"><h3>학생별 신용도·권한</h3>${creditTableHtml()}</div>
+    <div class="card"><div class="miniHead"><h3>학생별 신용도·권한</h3><button onclick="showCreditHelp()">도움말</button></div>${creditTableHtml()}</div>
     <div class="card"><h3>경고 이의신청</h3>${roleWarningAppealTableHtml()}</div>
     <div class="card"><h3>직무유기 단계 초기화</h3><div class="field"><label>학생</label><select id="resetDutyStudent">${studentOptions()}</select></div><button onclick="resetDutyStage()">직무유기 0단계로</button></div>
   </div>`;
@@ -2104,12 +2931,60 @@ function roleAdminPanelHtml(){
 function creditTableHtml(){
   const rows=students().map(s=>({s,c:creditScoreInfo(s.id)})).sort((a,b)=>b.c.score-a.c.score);
   if(!rows.length) return `<p class="small">학생 없음</p>`;
-  return `<div class="scroll"><table><thead><tr><th>학생</th><th>직업</th><th>신용</th><th>경고</th><th>직무유기</th></tr></thead><tbody>${rows.map(({s,c})=>`<tr><td>${s.name}</td><td>${studentJobName(s)||"-"}</td><td><span class="pill ${c.score>=80?'green':c.score>=65?'blue':c.score>=50?'orange':'red'}">${c.grade} · ${c.score}</span></td><td>${warningCountForStudent(s.id)}회</td><td>${dutyStage(s.id)}단계</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>학생</th><th>직업</th><th>신용</th><th>경고</th><th>직무유기</th></tr></thead><tbody>${rows.map(({s,c})=>`<tr><td>${s.name}</td><td>${studentJobName(s)||"-"}</td><td><span class="pill ${c.score>=800?'green':c.score>=700?'blue':c.score>=600?'orange':'red'}">${c.grade} · ${c.score}</span></td><td>${warningCountForStudent(s.id)}회</td><td>${dutyStage(s.id)}단계</td></tr>`).join("")}</tbody></table></div>`;
 }
 function roleWarningAppealTableHtml(){
   const rows=roleWarnings().filter(w=>w.appealable && w.status==="appealed");
   if(!rows.length) return `<p class="small">처리할 이의신청이 없습니다.</p>`;
   return `<div class="scroll"><table><thead><tr><th>학생</th><th>종류</th><th>사유</th><th>이의 내용</th><th>처리</th></tr></thead><tbody>${rows.map(w=>`<tr><td>${studentName(w.targetId)}</td><td>${specialRoleName(w.source)}</td><td>${w.reason||"사유 없음"}</td><td>${w.appealReason||""}</td><td><button class="green" onclick="resolveRoleWarningAppeal('${w.id}','cancelled')">인용</button> <button class="orange" onclick="resolveRoleWarningAppeal('${w.id}','upheld')">기각</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+function studentWorkClaimsHtml(id){
+  const rules=pieceRateWorkRulesForStudent(id);
+  const rows=workClaimsForStudent(id);
+  return `<div class="section">
+    <div class="head"><div><h2>업무 기록 제출</h2><div class="sub">건당 지급 직업의 업무를 제출하면 국세청 심사 후 교사가 지급합니다.</div></div>${currentAssetPill(id)}</div>
+    ${rules.length?`<div class="grid g2">
+      <div class="card">
+        <h3>새 업무 기록</h3>
+        <div class="field"><label>일자</label><input id="workClaimDate" type="date" value="${today()}"></div>
+        <div class="field"><label>업무 종류</label><select id="workClaimRule">${workRuleSelectOptions(id)}</select></div>
+        <div class="field"><label>상황 설명</label><textarea id="workClaimSituation" placeholder="무슨 일을 했는지 적어주세요"></textarea></div>
+        <div class="field"><label>관련 대상</label><input id="workClaimTarget" placeholder="학생, 법인, 가게 등"></div>
+        <div class="field"><label>증거/설명</label><textarea id="workClaimEvidence" placeholder="확인할 수 있는 내용"></textarea></div>
+        <button class="primary" onclick="submitWorkClaim()">제출</button>
+      </div>
+      <div class="card">
+        <h3>내 제출 목록</h3>
+        ${studentWorkClaimTableHtml(id,rows)}
+      </div>
+    </div>`:`<p class="small">현재 건당 지급 직업이 없어 업무 기록을 제출할 수 없습니다.</p>`}
+  </div>`;
+}
+function studentWorkClaimTableHtml(id,rows=workClaimsForStudent(id)){
+  if(!rows.length) return `<p class="small">제출한 업무 기록이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>일자</th><th>업무</th><th>상태</th><th class="num">임금</th><th>심사 사유</th></tr></thead><tbody>${rows.map(c=>`<tr><td>${c.workDate||"-"}</td><td><b>${c.workTypeName||"-"}</b><br><span class="small">${c.situation||""}</span></td><td><span class="pill ${c.status==="paid"||c.status==="approved"?"green":c.status==="pending"?"blue":c.status==="held"?"orange":"red"}">${claimStatusText(c.status)}</span></td><td class="num">${c.approvedWage?won(c.approvedWage):"-"}</td><td>${c.reviewReason||"-"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function taxOfficeReviewHtml(officerId){
+  const rows=workClaims().filter(c=>c.status==="pending");
+  const estimate=taxOfficeWageEstimate(officerId);
+  const paid=obj(data.taxOfficeWageRecords)[taxOfficeWageRecordId(officerId,estimate.day)];
+  const estimateBox=`<div class="card"><h3>오늘 국세청 예상 임금</h3><p class="small">심사 ${estimate.reviewedClaimsCount}건 x 2 + 징수 ${estimate.collectedTaxCasesCount}건 x 5 + 징수액 보너스</p><div class="value">${won(estimate.total)}</div><div class="small">징수액 ${won(estimate.collectedTaxAmount)} / 보너스 ${won(estimate.bonus)}${paid?` / 지급완료 ${won(paid.amount)}`:""}</div></div>`;
+  const table=!rows.length ? `<p class="small">심사 대기 중인 업무 기록이 없습니다.</p>` : `<div class="scroll"><table><thead><tr><th>제출자</th><th>직업/업무</th><th>일자</th><th>상황</th><th>증거</th><th>처리</th></tr></thead><tbody>${rows.map(c=>`<tr><td>${c.studentName||studentName(c.studentId)}</td><td><b>${c.jobName||"-"}</b><br>${c.workTypeName||"-"}</td><td>${c.workDate||"-"}</td><td>${c.situation||"-"}<br><span class="small">${c.relatedTarget||""}</span></td><td>${c.evidenceText||"-"}</td><td>${c.studentId===officerId?`<span class="pill red">본인 기록 처리 불가</span>`:`<div class="toolbar"><button class="green" onclick="reviewWorkClaim('${c.id}','approved')">승인</button><button class="danger" onclick="reviewWorkClaim('${c.id}','rejected')">거부</button><button class="orange" onclick="reviewWorkClaim('${c.id}','held')">보류</button></div>`}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="section rolePanel taxPanel"><div class="head"><div><h2>업무 심사</h2><div class="sub">건당 지급 업무 기록을 승인, 거부, 보류합니다.</div></div><span class="pill green">국세청</span></div><div class="grid g2">${estimateBox}<div class="card"><h3>심사 대기 목록</h3>${table}</div></div></div>`;
+}
+function snackRetailerPurchaseHtml(id){
+  const products=arr(data.products);
+  const rows=products.map(p=>{
+    const stock=p.stock ?? p.wholesaleStock ?? p.inventory;
+    const price=productWholesalePrice(p);
+    return `<tr><td><b>${p.name}</b><br><span class="small">${p.note||""}</span></td><td class="num">${won(price)}</td><td class="num">${stock===undefined?"-":n(stock)}</td><td><input id="snackQty_${p.id}" type="number" min="1" value="1" style="width:80px"></td><td><button class="green" onclick="buyRetailerSnack('${p.id}')">구매</button></td></tr>`;
+  }).join("");
+  return `<div class="section">
+    <div class="head"><div><h2>과자 구매</h2><div class="sub">과자 소매상만 도매 재고를 구매해 판매 재고로 확보할 수 있습니다.</div></div>${currentAssetPill(id)}</div>
+    <div class="scroll"><table><thead><tr><th>과자</th><th class="num">구매가</th><th class="num">남은 재고</th><th>수량</th><th>구매</th></tr></thead><tbody>${rows||`<tr><td colspan="5">등록된 상품이 없습니다.</td></tr>`}</tbody></table></div>
+    <h3>내 판매 재고</h3>
+    <p class="small">${inventoryHtml(id)}</p>
+  </div>`;
 }
 function roleWorkHtml(id){
   const roles=specialRoleIdsForStudent(id);
@@ -2145,6 +3020,7 @@ function taxOfficeWorkHtml(id){
   return `<div class="section rolePanel taxPanel">
     <div class="head"><div><h2>국세청 업무</h2><div class="sub">세금 미납 거래를 적발하면 세액의 1.5배를 징수합니다. 원래 세액은 국고, 추가 0.5배는 국세청 몫입니다.</div></div><span class="pill green">국세청</span></div>
     ${taxAuditListHtml(id)}
+    ${taxOfficeReviewHtml(id)}
   </div>`;
 }
 
@@ -2178,7 +3054,7 @@ function roleWarningTableHtml(source,actorId=""){
   return `<div class="scroll"><table><thead><tr><th>날짜</th><th>대상</th><th>사유</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows.map(w=>`<tr><td>${(w.ts||"").slice(0,10)}</td><td>${studentName(w.targetId)}</td><td>${w.reason||"사유 없음"}</td><td>${w.status==="cancelled"?"취소":w.status==="appealed"?"이의신청":w.status==="upheld"?"유지":"진행"}</td><td>${w.status!=="cancelled" && actorId && w.actorId===actorId?`<button class="danger" onclick="cancelMyRoleWarning('${w.id}')">취소</button>`:"-"}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function taxAuditCandidates(){
-  return arr(data.ledger).filter(e=>isStudentTradeLedger(e) && taxableLedgerLines(e).length>0).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
+  return (derived.ledger || []).filter(e=>isStudentTradeLedger(e) && taxableLedgerLines(e).length>0).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
 }
 function taxAuditListHtml(officerId){
   const rows=taxAuditCandidates().slice(0,20);
@@ -2192,6 +3068,32 @@ function taxAuditListHtml(officerId){
 
 function wageExcludeCheckboxes(){
   return `<div class="studentCheckGrid exclusionBox">${students().map(s=>`<label><input type="checkbox" class="salaryExclude" value="${s.id}"> ${s.name}<span class="small">${studentJobName(s)||""}</span></label>`).join("")||"<span class='small'>학생 없음</span>"}</div>`;
+}
+function approvedWorkClaimsPayoutHtml(){
+  const rows=approvedUnpaidClaims();
+  const byStudent={};
+  rows.forEach(c=>{
+    if(!byStudent[c.studentId]) byStudent[c.studentId]={count:0,total:0,claims:[]};
+    byStudent[c.studentId].count++;
+    byStudent[c.studentId].total+=money(c.approvedWage);
+    byStudent[c.studentId].claims.push(c);
+  });
+  const summary=Object.entries(byStudent).map(([studentId,x])=>`<tr><td><b>${studentName(studentId)}</b></td><td class="num">${x.count}건</td><td class="num">${won(x.total)}</td><td><button class="green" onclick="payApprovedWorkClaimsForStudent('${studentId}')">학생별 지급</button></td></tr>`).join("");
+  const detail=rows.map(c=>`<tr><td>${c.studentName||studentName(c.studentId)}</td><td>${c.workDate||"-"}</td><td>${c.jobName||"-"} / ${c.workTypeName||"-"}</td><td class="num">${won(c.approvedWage)}</td><td><button onclick="paySingleWorkClaim('${c.id}')">건별 지급</button></td></tr>`).join("");
+  return `<div class="section">
+    <div class="head"><div><h2>승인된 미지급 업무임금</h2><div class="sub">국세청이 승인했고 아직 지급되지 않은 건만 지급합니다.</div></div><button class="primary" onclick="payAllApprovedWorkClaims()" ${rows.length?"":"disabled"}>전체 지급</button></div>
+    ${rows.length?`<div class="grid g2"><div class="card"><h3>학생별 합계</h3><div class="scroll"><table><thead><tr><th>학생</th><th class="num">건수</th><th class="num">지급 예정액</th><th>지급</th></tr></thead><tbody>${summary}</tbody></table></div></div><div class="card"><h3>개별 업무기록</h3><div class="scroll"><table><thead><tr><th>학생</th><th>일자</th><th>업무</th><th class="num">임금</th><th>지급</th></tr></thead><tbody>${detail}</tbody></table></div></div></div>`:`<p class="small">승인된 미지급 업무임금이 없습니다.</p>`}
+  </div>`;
+}
+function taxOfficeTeacherWageHtml(){
+  const officers=students().filter(s=>studentHasRole(s.id,"tax_office"));
+  if(!officers.length) return "";
+  const rows=officers.map(s=>{
+    const est=taxOfficeWageEstimate(s.id);
+    const rec=obj(data.taxOfficeWageRecords)[taxOfficeWageRecordId(s.id,est.day)];
+    return `<tr><td><b>${s.name}</b></td><td>${est.day}</td><td class="num">${est.reviewedClaimsCount}</td><td class="num">${est.collectedTaxCasesCount}</td><td class="num">${won(est.collectedTaxAmount)}</td><td class="num"><b>${won(est.total)}</b></td><td>${rec?`<span class="pill green">지급완료</span>`:`<button class="green" onclick="payTaxOfficeWage('${s.id}')">지급</button>`}</td></tr>`;
+  }).join("");
+  return `<div class="section"><div class="head"><div><h2>국세청 자동 임금</h2><div class="sub">오늘 심사 처리와 미납 세금 징수 실적으로 자동 산정합니다.</div></div></div><div class="scroll"><table><thead><tr><th>국세청</th><th>기준일</th><th class="num">심사</th><th class="num">징수</th><th class="num">징수액</th><th class="num">예상 임금</th><th>지급</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function renderJobs(){
   const el=document.getElementById("jobs"); if(!el) return;
@@ -2247,7 +3149,9 @@ function renderJobs(){
           ${wageExcludeCheckboxes()}
         </div>
       </div>
-    </div>`;
+    </div>
+    ${approvedWorkClaimsPayoutHtml()}
+    ${taxOfficeTeacherWageHtml()}`;
 }
 
 function transactionStudentTiles(){
@@ -2270,7 +3174,7 @@ function renderTransactions(){
           <div class="txModeBtns">
             <button id="bulkMode_pay" class="active" onclick="setBulkTxMode('pay')">상금 지급</button>
             <button id="bulkMode_collect" onclick="setBulkTxMode('collect')">직접 환수</button>
-            <button id="bulkMode_fine" onclick="setBulkTxMode('fine')">잔고비례 벌금</button>
+            <button id="bulkMode_fine" onclick="setBulkTxMode('fine')">벌금 고지서</button>
           </div>
           <div class="field"><label>1인 금액</label><input id="bulkTxAmount" type="number" value="10"></div>
           <div class="field"><label>내용</label><input id="bulkTxDesc" value="수업 보상"></div>
@@ -2279,7 +3183,7 @@ function renderTransactions(){
             <button onclick="toggleBulkTxStudents(false)">선택 해제</button>
             <button class="primary" onclick="runBulkStudentTransaction()">일괄 처리</button>
           </div>
-          <p class="small">잔고비례 벌금은 설정 탭의 벌금율을 사용하며 1인 금액은 무시됩니다.</p>
+          <p class="small">벌금 고지서는 현재 자산 스냅샷으로 금액이 확정되며, 학생이 직접 납부합니다.</p>
         </div>
         <div class="card">
           <h3>학생 선택</h3>
@@ -2292,14 +3196,16 @@ function renderTransactions(){
         <div class="card"><h3>송금 처리</h3><div class="field"><label>보내는 학생</label><select id="fromStudent">${studentOptions()}</select></div><div class="field"><label>받는 학생</label><select id="toStudent">${studentOptions()}</select></div><div class="field"><label>송금액</label><input id="transferAmount" type="number" value="10"></div><button class="primary" onclick="manualTransfer()">송금 처리</button></div>
         <div class="card"><h3>전체 지급</h3><div class="field"><label>1인당 금액</label><input id="salaryAmount" type="number" value="10"></div><div class="field"><label>내용</label><input id="salaryDesc" value="월급"></div><button class="green" onclick="payAll()">전체 지급</button></div>
       </div>
-    </div>`;
+    </div>
+    <div class="section"><div class="head"><div><h2>벌금 고지서 현황</h2><div class="sub">경고 2회 또는 수동 벌금으로 발행된 고지서입니다.</div></div></div>${fineAdminTableHtml()}</div>`;
 }
 
 function renderShop(){
   document.getElementById("shop").innerHTML = `
     <div class="section"><div class="head"><div><h2>상품·상점</h2><div class="sub">상품 카드를 누르면 가격 차트를 볼 수 있습니다.</div></div></div>
-      <div class="grid g4">${arr(data.products).map(p=>`<div class="card" onclick="showProductChart('${p.id}')" style="cursor:pointer"><h3>${p.name}</h3><div class="value">${publicPrice(p)===null?"비공개":won(publicPrice(p))}</div><div class="sub">${p.note||""}</div><div class="toolbar"><span class="pill ${p.secret?'orange':'blue'}">${p.kind}</span><button onclick="event.stopPropagation();showProductChart('${p.id}')">차트</button></div></div>`).join("")}</div>
+      <div class="grid g4">${arr(data.products).map(p=>`<div class="card" onclick="showProductChart('${p.id}')" style="cursor:pointer"><h3>${product(p.id)?.name||p.name}</h3><div class="value">${won(publicPrice(product(p.id)||p))}</div><div class="sub">${product(p.id)?.note||p.note||""}</div><div class="toolbar"><span class="pill blue">${priceTypeLabel(product(p.id)||p)}</span><button onclick="event.stopPropagation();showProductChart('${p.id}')">차트</button></div></div>`).join("")}</div>
     </div>
+    ${snackPriceManageHtml()}
     <div class="section"><div class="head"><div><h2>아바타 상점</h2><div class="sub">학생들이 구매할 수 있는 아바타 아이템입니다. 새 이미지 아바타 ${Object.keys(CUSTOM_AVATARS).length}개 포함.</div></div></div>
       <div class="itemShopGrid">${avatarItemCatalog().map(it=>`<div class="itemCard"><div class="shopThumb">${itemThumb(it)}</div><h4>${it.name}</h4><div class="small"><span class="pill ${rarityPillClass(it.rarity)}">${it.rarity}</span> <span class="pill">${it.type}</span></div><div class="value" style="font-size:22px">${won(cosmeticPrice(it))}</div></div>`).join('')}</div>
     </div>
@@ -2318,6 +3224,29 @@ function inventoryRows(){
     const txt=Object.entries(inv).filter(([_,q])=>n(q)>0).map(([pid,q])=>`${product(pid)?.name||"상품"} ${q}`).join(" / ");
     return `<tr><td>${s.name}</td><td>${txt||"-"}</td></tr>`;
   }).join("") || `<tr><td colspan="2">학생 없음</td></tr>`;
+}
+function priceTypeLabel(p){
+  return p?.priceType==="fixed" ? "고정가" : p?.priceType==="economyIndex" ? "경제지수 연동" : (p?.kind||"가격");
+}
+function snackPriceManageHtml(){
+  const rows=arr(data.products).map(raw=>{
+    const p=product(raw.id)||raw;
+    return `<tr>
+      <td><b>${p.name}</b><br><span class="small">${p.note||""}</span></td>
+      <td><select id="snack_${p.id}_priceType"><option value="fixed" ${p.priceType==="fixed"?"selected":""}>fixed</option><option value="economyIndex" ${p.priceType==="economyIndex"?"selected":""}>economyIndex</option></select></td>
+      <td><input id="snack_${p.id}_fixedPrice" type="number" value="${n(p.fixedPrice)}"></td>
+      <td><input id="snack_${p.id}_basePrice" type="number" value="${n(p.basePrice)}"></td>
+      <td><input id="snack_${p.id}_baseEconomyIndex" type="number" value="${n(p.baseEconomyIndex)||100}"></td>
+      <td><input id="snack_${p.id}_sensitivity" type="number" step="0.1" value="${n(p.sensitivity)||1}"></td>
+      <td><input id="snack_${p.id}_minPrice" type="number" value="${n(p.minPrice)||1}"></td>
+      <td><input id="snack_${p.id}_maxPrice" type="number" value="${p.maxPrice??""}"></td>
+      <td><input id="snack_${p.id}_wholesaleRate" type="number" step="0.01" value="${n(p.wholesaleRate)||0.65}"></td>
+      <td class="num">${won(productPrice(p))}<br><span class="small">도매 ${won(productWholesalePrice(p))}</span></td>
+    </tr>`;
+  }).join("");
+  return `<div class="section"><div class="head"><div><h2>과자 가격 관리</h2><div class="sub">소비자가와 도매가는 같은 가격 계산 함수를 사용합니다. 현재 경제지수: ${won(snackEconomyIndex())}</div></div><button class="primary" onclick="saveSnackProductPrices()">저장</button></div>
+    <div class="scroll"><table><thead><tr><th>상품</th><th>priceType</th><th>fixedPrice</th><th>basePrice</th><th>baseEconomyIndex</th><th>sensitivity</th><th>minPrice</th><th>maxPrice</th><th>wholesaleRate</th><th class="num">미리보기</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 function industryInventoryText(studentId){
   const mat=industryMaterials().filter(item=>industryQty(studentId,item.id)>0).map(item=>`${item.name} ${industryQty(studentId,item.id)}`).join(" / ");
@@ -2351,8 +3280,10 @@ function renderIndustryTeacher(){
 function renderTickets(){
   document.getElementById("tickets").innerHTML = `
     <div class="section"><div class="head"><div><h2>티켓 시장</h2><div class="sub">티켓 가격과 구매/판매를 처리합니다.</div></div></div>
+      ${ticketPriceSummaryCardsHtml()}
       <div class="grid g3">${Object.keys(ticketMeta).map(k=>ticketCard(k)).join("")}</div>
     </div>
+    <div class="section"><div class="head"><div><h2>최근 5일 티켓 가격표</h2><div class="sub">날짜별 가격과 등락률을 크게 표시합니다.</div></div></div>${recentTicketPriceTableHtml(5)}</div>
     <div class="section"><div class="grid g2">
       <div class="card"><h3>티켓 구매</h3><div class="field"><label>학생</label><select id="ticketBuyer">${studentOptions()}</select></div><div class="field"><label>티켓</label><select id="ticketBuyKind">${ticketOptions()}</select></div><button class="blue" onclick="manualTicketBuy()">구매 처리</button></div>
       <div class="card"><h3>티켓 판매</h3><div class="field"><label>학생</label><select id="ticketSeller">${studentOptions()}</select></div><div class="field"><label>티켓</label><select id="ticketSellKind">${ticketOptions()}</select></div><button class="green" onclick="manualTicketSell()">판매 처리</button></div>
@@ -2360,6 +3291,7 @@ function renderTickets(){
 }
 function ticketCard(k){
   const t=ticketData(k), m=ticketMeta[k]||{name:k,color:"#64748b",formula:""};
+  const info=ticketPriceInfo(k);
   const soldRatio=Math.round((n(t.sold)/Math.max(1,n(t.supply)))*100);
   return `<div class="card" style="border-left:9px solid ${m.color}">
     <h3>${m.name}</h3><div class="sub">${m.formula}</div>
@@ -2367,10 +3299,11 @@ function ticketCard(k){
     <div class="ticketInventoryMeter"><div style="width:${soldRatio}%"></div></div>
     <div class="ticketInventoryText">총 ${n(t.supply)}장 · 판매 ${n(t.sold)}장 · 재고 ${n(t.stock)}장</div>
     <div class="grid g3" style="margin-top:10px">
-      <div class="price"><div class="label">기준</div><div class="value">${won(basePrice(k))}</div></div>
-      <div class="price buy"><div class="label">구매</div><div class="value">${won(ticketBuy(k))}</div></div>
-      <div class="price sell"><div class="label">판매</div><div class="value">${won(ticketSell(k))}</div></div>
+      <div class="price"><div class="label">기본</div><div class="value">${won(info.base)}</div></div>
+      <div class="price buy"><div class="label">현재가</div><div class="value">${won(info.close)}</div></div>
+      <div class="price sell"><div class="label">등락률</div><div class="value">${pct(info.changeRate)}</div></div>
     </div>
+    <div class="ticketFormulaMini">전날 대비 ${signedWon(info.change)} · 소득보정 ${Math.round(info.incomeCorrection*100)}% · 수요보정 ${Math.round(info.demandCorrection*100)}%</div>
     <div class="field" style="margin-top:10px"><label>총수량</label><input type="number" value="${n(t.supply)}" onchange="updateTicket('${k}','supply',this.value)"></div>
     <div class="field"><label>판매된 수 보정</label><input type="number" value="${n(t.sold)}" onchange="updateTicket('${k}','sold',this.value)"></div>
     <div class="small">현재재고는 총수량 - 판매된 수로 자동 계산됩니다. 구매하면 판매 수가 늘고, 판매/사용하면 재고로 돌아옵니다.</div>
@@ -2448,8 +3381,8 @@ function ledgerTaxButton(e){
 }
 function tradeKingRows(day=today()){
   const scores={};
-  arr(data.ledger).forEach(e=>{
-    if(e.day!==day || !isStudentTradeLedger(e) || !ledgerTaxPaid(e)) return;
+  ledgerForDay(day).forEach(e=>{
+    if(!isStudentTradeLedger(e) || !ledgerTaxPaid(e)) return;
     const participants=ledgerStudentParticipants(e);
     participants.forEach(id=>{
       if(!scores[id]) scores[id]={id,count:0,volume:0};
@@ -2468,16 +3401,45 @@ function tradeKingTableHtml(day=today()){
   </div>`).join("")}</div>`;
 }
 function renderLedger(){
-  const entries=arr(data.ledger).sort((a,b)=>b.ts.localeCompare(a.ts));
+  const entries=[...(derived.ledger || [])].sort((a,b)=>(b.ts||"").localeCompare(a.ts||"")).slice(0,300);
   document.getElementById("ledger").innerHTML = `
     <div class="section"><div class="head"><div><h2>오늘 거래왕</h2><div class="sub">세금 납부/거래 인정된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
-    <div class="section"><div class="head"><div><h2>거래장부</h2><div class="sub">모든 잔고는 이 장부를 합산해 계산합니다.</div></div></div><div class="scroll"><table><thead><tr><th>시간</th><th>종류</th><th>내용</th><th>변동</th><th>세금/거래인정</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${new Date(e.ts).toLocaleString("ko-KR")}</td><td><span class="pill">${e.type}</span></td><td>${e.desc}</td><td>${arr(e.lines).map(l=>`${studentName(l.account)} ${l.delta>0?"+":""}${won(l.delta)}`).join("<br>")}</td><td>${ledgerTaxButton(e)}</td></tr>`).join("") || `<tr><td colspan="5">거래 없음</td></tr>`}</tbody></table></div></div>`;
+    <div class="section"><div class="head"><div><h2>거래장부</h2><div class="sub">최근 300건을 먼저 표시합니다. 모든 잔고 계산은 전체 장부를 기준으로 유지됩니다.</div></div><span class="pill blue">전체 ${derived.ledger.length}건</span></div><div class="scroll"><table><thead><tr><th>시간</th><th>종류</th><th>내용</th><th>변동</th><th>세금/거래인정</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${new Date(e.ts).toLocaleString("ko-KR")}</td><td><span class="pill">${e.type}</span></td><td>${e.desc}</td><td>${arr(e.lines).map(l=>`${studentName(l.account)} ${l.delta>0?"+":""}${won(l.delta)}`).join("<br>")}</td><td>${ledgerTaxButton(e)}</td></tr>`).join("") || `<tr><td colspan="5">거래 없음</td></tr>`}</tbody></table></div></div>`;
 }
 
 function firstTicketKey(){ return Object.keys(ticketMeta)[0] || "classClean"; }
 function safeHistoryTableHtml(){
   try { return historyTableHtml(); }
   catch(e){ console.error("history table error", e); return `<p class="small">가격 기록 표를 불러오지 못했습니다: ${e.message}</p>`; }
+}
+function ticketChangeBadge(info){
+  const up=n(info.change)>=0;
+  return `<span class="ticketChange ${up?'up':'down'}">${up?'▲':'▼'} ${signedWon(info.change)} / ${pct(info.changeRate)}</span>`;
+}
+function ticketPriceSummaryCardsHtml(){
+  const stats=currentEconomyStats(today());
+  const keys=["personalClean","classClean","playHour"].filter(k=>ticketMeta[k]);
+  return `<div class="ticketCurrentGrid">${keys.map(k=>{
+    const info=stats.ticketPrices[k] || ticketPriceInfo(k);
+    return `<div class="ticketCurrentCard" style="--ticket-color:${ticketMeta[k].color}">
+      <span>${ticketMeta[k].name}</span>
+      <b>${won(info.close)}</b>
+      ${ticketChangeBadge(info)}
+      <em>구매 ${info.buyOrders}명 · 판매 ${info.sellOrders}명</em>
+    </div>`;
+  }).join("")}</div>`;
+}
+function recentTicketPriceTableHtml(limit=5){
+  const keys=["personalClean","classClean","playHour"].filter(k=>ticketMeta[k]);
+  const rows=economyHistoryRows(limit).filter(r=>r.ticketPrices);
+  if(!rows.length) return `<p class="small">최근 티켓 가격 기록이 아직 없습니다.</p>`;
+  return `<div class="recentTicketTable"><table><thead><tr><th>날짜</th>${keys.map(k=>`<th>${ticketMeta[k].name}</th>`).join("")}</tr></thead><tbody>${rows.slice(-limit).map(r=>`<tr>
+    <td><b>${r.day.slice(5).replace("-","/")}</b></td>
+    ${keys.map(k=>{
+      const info=obj(r.ticketPrices)[k] || {};
+      return `<td><b>${won(info.close)}</b><br><span class="${n(info.change)>=0?'upText':'downText'}">${n(info.change)>=0?'▲':'▼'} ${pct(info.changeRate)}</span></td>`;
+    }).join("")}
+  </tr>`).join("")}</tbody></table></div>`;
 }
 
 
@@ -2533,6 +3495,8 @@ function renderSettingsBasicFallback(msg=""){
     <div class="card"><label>전날 총소득</label><input id="setPrev" type="number" value="${n(data.previousIncome)}"></div>
     <div class="card"><label>거래세율 %</label><input id="setTax" type="number" value="${n(data.settings?.taxRate)*100}"></div>
     <div class="card"><label>벌금율 %</label><input id="setFine" type="number" value="${n(data.settings?.fineRate)*100}"></div>
+    <div class="card"><label>최소 벌금</label><input id="setFineMin" type="number" value="${n(data.settings?.fineMin)||10}"></div>
+    <div class="card"><label>최대 벌금</label><input id="setFineMax" type="number" value="${n(data.settings?.fineMax)||0}"><div class="small">0이면 1인당 평균 보유량 ÷ 5</div></div>
     <div class="card"><label>채권 만기일</label><input id="setBondDays" type="number" value="${n(data.settings?.bondDays)}"></div>
     <div class="card"><label>예금 이자율 %</label><input id="setDepositRate" type="number" value="${n(data.settings?.depositRate)*100}"></div>
     <div class="card"><label>아바타 제작자 수익률 %</label><input id="setAvatarCreatorRate" type="number" value="${avatarCreatorPercent()}"></div>
@@ -2550,6 +3514,8 @@ function renderSettings(){
       <div class="card"><label>전날 총소득</label><input id="setPrev" type="number" value="${n(data.previousIncome)}"></div>
       <div class="card"><label>거래세율 %</label><input id="setTax" type="number" value="${n(s.taxRate)*100}"></div>
       <div class="card"><label>벌금율 %</label><input id="setFine" type="number" value="${n(s.fineRate)*100}"></div>
+      <div class="card"><label>최소 벌금</label><input id="setFineMin" type="number" value="${n(s.fineMin)||10}"></div>
+      <div class="card"><label>최대 벌금</label><input id="setFineMax" type="number" value="${n(s.fineMax)||0}"><div class="small">0이면 1인당 평균 보유량 ÷ 5</div></div>
       <div class="card"><label>채권 만기일</label><input id="setBondDays" type="number" value="${n(s.bondDays)}"></div>
       <div class="card"><label>예금 이자율 %</label><input id="setDepositRate" type="number" value="${n(s.depositRate)*100}"></div>
       <div class="card"><label>아바타 제작자 수익률 %</label><input id="setAvatarCreatorRate" type="number" value="${avatarCreatorPercent()}"></div>
@@ -2589,11 +3555,11 @@ function renderSettings(){
         <button class="orange" onclick="addManualTicketPrice()">티켓 가격 기록 추가</button>
       </div>
       <div class="card">
-        <h3>소득 기준 가격 자동 기록</h3>
+        <h3>경제지수 기준 가격 자동 기록</h3>
         <div class="field"><label>날짜</label><input id="incomePriceDate" type="date" value="${today()}"></div>
-        <div class="field"><label>해당일 소득 Y</label><input id="incomePriceValue" type="number" value="${n(data.previousIncome)}"></div>
-        <button class="green" onclick="addIncomeBasedPriceHistory()">소득으로 상품 가격 자동 기록</button>
-        <p class="small">입력한 소득을 기준으로 소득연동 상품 가격과 티켓 기준가를 자동 계산해 기록합니다.</p>
+        <div class="field"><label>해당일 경제지수</label><input id="incomePriceValue" type="number" value="${snackEconomyIndex()}"></div>
+        <button class="green" onclick="addIncomeBasedPriceHistory()">경제지수로 상품 가격 자동 기록</button>
+        <p class="small">입력한 경제지수를 기준으로 경제지수 연동 상품 가격을 자동 계산해 기록합니다.</p>
       </div>
     </div>
     <div class="toolbar"><button onclick="recordSnapshot()">현재 가격 전체 기록 저장</button><button class="danger" onclick="clearPriceHistory()">가격 기록 전체 삭제</button></div>
@@ -2640,6 +3606,8 @@ function renderStudentView(){
   const body = studentTab==="dashboard" ? studentDashboardHtml(selected)
     : studentTab==="market" ? marketHtml(selected)
     : studentTab==="industry" ? industryHtml(selected)
+    : studentTab==="workClaims" ? studentWorkClaimsHtml(selected)
+    : studentTab==="corporations" ? corporationStudentHtml(selected)
     : studentTab==="role" ? roleWorkHtml(selected)
     : studentTab==="room" ? miniRoomGalleryHtml(selected)
     : studentTab==="cosmetic" ? cosmeticShopHtml(selected)
@@ -2666,6 +3634,110 @@ function myRequests(id){
 
 
 
+window.submitWorkClaim = async function(){
+  const studentId=selectedStudent;
+  if(!studentId) return toast("학생 로그인이 필요합니다.");
+  const raw=document.getElementById("workClaimRule")?.value || "";
+  const [jobId,workType]=raw.split("::");
+  const j=job(jobId);
+  if(!j || !studentHasJob(student(studentId),jobId) || !isPieceRateJob(j)) return toast("제출 가능한 건당 지급 직업이 아닙니다.");
+  const rule=jobWageRulesForJob(jobId).find(r=>String(r.workType||r.id||"default")===String(workType||"default"));
+  if(!rule) return toast("업무 종류를 확인하세요.");
+  const situation=document.getElementById("workClaimSituation")?.value.trim() || "";
+  if(!situation) return toast("상황 설명을 입력하세요.");
+  const id="wc_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+  const at=new Date().toISOString();
+  await dbSet("workClaims/"+id,{
+    id,studentId,studentName:studentName(studentId),jobId,jobName:j.name,
+    workType:rule.workType||rule.id||"default",workTypeName:rule.workTypeName||rule.name||"업무",
+    workDate:document.getElementById("workClaimDate")?.value || today(),
+    situation,relatedTarget:document.getElementById("workClaimTarget")?.value.trim() || "",
+    evidenceText:document.getElementById("workClaimEvidence")?.value.trim() || "",
+    status:"pending",approvedWage:0,paid:false,createdAt:at,updatedAt:at
+  });
+  toast("업무 기록을 제출했습니다.");
+}
+window.reviewWorkClaim = async function(id,status){
+  if(!studentHasRole(selectedStudent,"tax_office")) return toast("국세청 권한이 없습니다.");
+  const c=obj(data.workClaims)[id];
+  if(!c || c.status!=="pending") return toast("심사 대기 기록을 찾을 수 없습니다.");
+  if(c.studentId===selectedStudent) return toast("본인 업무 기록은 심사할 수 없습니다.");
+  const reason=prompt(status==="approved"?"승인 메모(선택)":"사유를 입력하세요","");
+  if((status==="rejected" || status==="held") && !String(reason||"").trim()) return toast("거부/보류 사유는 필수입니다.");
+  const updates={status,reviewedBy:selectedStudent,reviewedByName:studentName(selectedStudent),reviewedAt:new Date().toISOString(),reviewReason:String(reason||"").trim(),updatedAt:new Date().toISOString()};
+  if(status==="approved"){
+    const rule=workRuleByClaim(c);
+    const wage=money(rule?.wage ?? job(c.jobId)?.wage ?? 0);
+    if(wage<=0) return toast("임금표에서 임금액을 찾을 수 없습니다.");
+    updates.approvedWage=wage;
+    updates.paid=false;
+  }
+  await dbUpdate("workClaims/"+id,updates);
+  toast(`${claimStatusText(status)} 처리했습니다.`);
+}
+async function payApprovedWorkClaimIds(ids,paidBy="teacher"){
+  ids=[...new Set(ids.filter(Boolean))];
+  if(!ids.length) return toast("지급할 업무임금이 없습니다.");
+  let paid=0,total=0;
+  const result=await runTransaction(rootRef,current=>{
+    if(!current) return current;
+    current.ledger=current.ledger||{};
+    current.workClaims=current.workClaims||{};
+    ids.forEach(id=>{
+      const c=current.workClaims[id];
+      if(!c || c.status!=="approved" || c.paid===true || money(c.approvedWage)<=0) return;
+      const amount=money(c.approvedWage);
+      const ledgerId="tx_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6)+"_"+paid;
+      current.ledger[ledgerId]={id:ledgerId,ts:new Date().toISOString(),day:today(),type:"wage",desc:"업무 임금 지급",lines:[{account:CENTRAL,delta:-amount},{account:c.studentId,delta:amount}],meta:{reason:"업무 임금 지급",source:"workClaim",workClaimId:id,studentId:c.studentId,amount,type:"wage",createdAt:new Date().toISOString()}};
+      c.status="paid"; c.paid=true; c.paidAt=new Date().toISOString(); c.paidBy=paidBy; c.updatedAt=new Date().toISOString();
+      paid++; total+=amount;
+    });
+    return current;
+  });
+  if(!result.committed) return toast("지급 처리에 실패했습니다.");
+  toast(`${paid}건 ${won(total)} 지급 완료`);
+}
+window.paySingleWorkClaim = id=>payApprovedWorkClaimIds([id]);
+window.payApprovedWorkClaimsForStudent = studentId=>payApprovedWorkClaimIds(approvedUnpaidClaims().filter(c=>c.studentId===studentId).map(c=>c.id));
+window.payAllApprovedWorkClaims = ()=>payApprovedWorkClaimIds(approvedUnpaidClaims().map(c=>c.id));
+window.payTaxOfficeWage = async function(officerId){
+  if(!studentHasRole(officerId,"tax_office")) return toast("국세청 학생이 아닙니다.");
+  const est=taxOfficeWageEstimate(officerId);
+  const recordId=taxOfficeWageRecordId(officerId,est.day);
+  if(obj(data.taxOfficeWageRecords)[recordId]) return toast("이미 지급된 국세청 임금입니다.");
+  if(est.total<=0) return toast("지급할 국세청 임금이 없습니다.");
+  const result=await runTransaction(rootRef,current=>{
+    if(!current) return current;
+    current.taxOfficeWageRecords=current.taxOfficeWageRecords||{};
+    if(current.taxOfficeWageRecords[recordId]) return current;
+    current.ledger=current.ledger||{};
+    const ledgerId="tx_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+    current.ledger[ledgerId]={id:ledgerId,ts:new Date().toISOString(),day:today(),type:"wage",desc:"국세청 자동 임금 지급",lines:[{account:CENTRAL,delta:-est.total},{account:officerId,delta:est.total}],meta:{source:"taxOfficeWage",recordId,officerId,...est}};
+    current.taxOfficeWageRecords[recordId]={id:recordId,officerId,officerName:studentName(officerId),amount:est.total,day:est.day,paidAt:new Date().toISOString(),paidBy:"teacher",details:est,ledgerId};
+    return current;
+  });
+  toast(result.committed ? "국세청 임금을 지급했습니다." : "지급 처리에 실패했습니다.");
+}
+window.buyRetailerSnack = async function(pid){
+  const buyer=selectedStudent;
+  if(!studentHasRole(buyer,"snack_retailer")) return toast("과자 소매상만 구매할 수 있습니다.");
+  const p=product(pid); if(!p) return toast("상품을 찾을 수 없습니다.");
+  const qty=money(document.getElementById(`snackQty_${pid}`)?.value);
+  if(qty<=0) return toast("수량을 확인하세요.");
+  const unitPrice=productWholesalePrice(p);
+  const total=unitPrice*qty;
+  const stock=p.stock ?? p.wholesaleStock ?? p.inventory;
+  if(stock!==undefined && n(stock)<qty) return toast("재고가 부족합니다.");
+  if(!requireCash(buyer,total)) return;
+  const inv=n(obj(obj(data.inventories)[buyer])[pid]);
+  const updates={[`inventories/${buyer}/${pid}`]:inv+qty};
+  if(p.stock!==undefined) updates[`products/${pid}/stock`]=n(p.stock)-qty;
+  else if(p.wholesaleStock!==undefined) updates[`products/${pid}/wholesaleStock`]=n(p.wholesaleStock)-qty;
+  else if(p.inventory!==undefined) updates[`products/${pid}/inventory`]=n(p.inventory)-qty;
+  await dbUpdate("",updates);
+  await addLedger("snackRetailerPurchase",`${studentName(buyer)} 과자 소매상 구매: ${p.name} ${qty}개`,[{account:buyer,delta:-total},{account:CENTRAL,delta:total}],{buyerStudentId:buyer,buyerName:studentName(buyer),itemId:pid,itemName:p.name,quantity:qty,unitPrice,totalPrice:total,type:"snackRetailerPurchase",createdAt:new Date().toISOString()});
+  toast("과자 구매 완료");
+}
 window.addJob = async function(){
   const name=document.getElementById("newJobName")?.value.trim();
   if(!name) return toast("직업명을 입력하세요.");
@@ -2753,14 +3825,69 @@ function wageForStudentByJobs(s){
   return money(base*dutyWageMultiplier(s.id));
 }
 
-async function applyWarningFineIfNeeded(targetId,source,warningId){
-  const count=warningCountForStudent(targetId,source);
-  if(count>0 && count%2===0){
-    const amount=fineAmount(targetId);
-    if(amount>0 && requireCash(targetId,amount)){
-      await addLedger("경고벌금",`${studentName(targetId)} ${specialRoleName(source)} 경고 ${count}회 벌금`,[{account:targetId,delta:-amount},{account:CENTRAL,delta:amount}],{source,warningId,count});
-      return amount;
+function fineNoticeExists(studentId,relatedWarningIds=[]){
+  const key=[...relatedWarningIds].sort().join("|");
+  return arr(data.fines).some(f=>{
+    if(f.studentId!==studentId || f.status==="cancelled") return false;
+    const other=arr(f.relatedWarningIds).sort().join("|");
+    return key && key===other;
+  });
+}
+async function createFineNotice(studentId,{reason="벌금",warningCountAtIssue=0,createdBy="teacher",relatedWarningIds=[],source="",actorId=""}={}){
+  if(!student(studentId)) return null;
+  if(relatedWarningIds.length && fineNoticeExists(studentId,relatedWarningIds)) return null;
+  const calc=calculateFineAmount(studentId);
+  const issuedAt=new Date().toISOString();
+  const id="fine_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+  const fine={
+    id,
+    studentId,
+    reason,
+    warningCountAtIssue,
+    issuedAt,
+    dueDate:fineDueDate(issuedAt),
+    assetSnapshot:calc.assetSnapshot,
+    fineRate:calc.fineRate,
+    fineAmount:calc.fineAmount,
+    minFine:calc.minFine,
+    maxFine:calc.maxFine,
+    status:"unpaid",
+    paidAt:"",
+    paidAmount:0,
+    remainingAmount:calc.fineAmount,
+    paymentSource:"",
+    createdBy,
+    source,
+    actorId,
+    relatedWarningIds
+  };
+  await dbSet("fines/"+id,fine);
+  return fine;
+}
+async function cancelUnpaidFinesForWarning(warningId){
+  const updates={};
+  arr(data.fines).forEach(f=>{
+    if(arr(f.relatedWarningIds).includes(warningId) && fineEffectiveStatus(f)!=="paid" && n(f.paidAmount)<=0){
+      updates[`fines/${f.id}/status`]="cancelled";
+      updates[`fines/${f.id}/cancelledAt`]=new Date().toISOString();
+      updates[`fines/${f.id}/cancelReason`]="warning_cancelled";
     }
+  });
+  if(Object.keys(updates).length) await dbUpdate("",updates);
+}
+async function applyWarningFineIfNeeded(targetId,source,warningId,explicitCount=null){
+  const existing=roleWarnings().filter(w=>w.targetId===targetId && w.source===source && w.status!=="cancelled" && w.id!==warningId);
+  const count=explicitCount===null ? existing.length+1 : explicitCount;
+  if(count>0 && count%2===0){
+    const relatedWarningIds=[warningId,...existing.map(w=>w.id)].filter(Boolean).slice(0,2);
+    const fine=await createFineNotice(targetId,{
+      reason:`${specialRoleName(source)} 경고 ${count}회`,
+      warningCountAtIssue:count,
+      createdBy:"system",
+      relatedWarningIds:[...new Set(relatedWarningIds)].slice(0,2),
+      source
+    });
+    return fine ? n(fine.fineAmount) : 0;
   }
   return 0;
 }
@@ -2769,9 +3896,10 @@ async function createRoleWarning(source,actorId,targetId,reason,appealable=false
   if(actorId===targetId) return toast("자기 자신에게는 경고할 수 없습니다."), false;
   if(source==="police" && !String(reason||"").trim()) return toast("경찰 경고는 사유가 반드시 필요합니다."), false;
   const id="warn_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+  const existingCount=activeWarningsForStudent(targetId,source).length;
   await dbSet("roleWarnings/"+id,{id,source,actorId,targetId,reason:String(reason||"").trim(),appealable,status:"issued",ts:new Date().toISOString()});
-  const fine=await applyWarningFineIfNeeded(targetId,source,id);
-  toast(`${studentName(targetId)} 경고 완료${fine?` / 벌금 ${won(fine)} 부과`:""}`);
+  const fine=await applyWarningFineIfNeeded(targetId,source,id,existingCount+1);
+  toast(`${studentName(targetId)} 경고 완료${fine?` / 벌금 고지서 ${won(fine)} 생성`:""}`);
   return true;
 }
 window.setDutyNeglectByPolice = async function(){
@@ -2804,6 +3932,7 @@ window.appealRefereeWarning = window.appealRoleWarning;
 window.resolveRoleWarningAppeal = async function(id,status){
   const w=obj(data.roleWarnings)[id]; if(!w) return;
   await dbUpdate("roleWarnings/"+id,{status,reviewedAt:new Date().toISOString()});
+  if(status==="cancelled") await cancelUnpaidFinesForWarning(id);
   toast(status==="cancelled"?"이의신청을 인용했습니다.":"경고를 유지했습니다.");
 }
 window.resolveRefereeAppeal = window.resolveRoleWarningAppeal;
@@ -2814,6 +3943,7 @@ window.cancelMyRoleWarning = async function(id){
   if(w.status==="cancelled") return toast("이미 취소된 경고입니다.");
   if(!confirm(`${studentName(w.targetId)}의 ${specialRoleName(w.source)} 경고를 취소할까요?`)) return;
   await dbUpdate("roleWarnings/"+id,{status:"cancelled",cancelledAt:new Date().toISOString(),cancelledBy:selectedStudent});
+  await cancelUnpaidFinesForWarning(id);
   toast("경고를 취소했습니다.");
 }
 window.resetDutyStage = async function(){
@@ -2943,6 +4073,15 @@ window.runBulkStudentTransaction = async function(){
   const amount=money(document.getElementById("bulkTxAmount")?.value);
   const desc=document.getElementById("bulkTxDesc")?.value || (mode==="pay"?"지급":mode==="collect"?"회수":"벌금");
   if(mode!=="fine" && amount<=0) return toast("금액을 확인하세요.");
+  if(mode==="fine"){
+    const created=[];
+    for(const id of ids){
+      const fine=await createFineNotice(id,{reason:desc||"수동 벌금",createdBy:"teacher"});
+      if(fine) created.push(`${studentName(id)} ${won(fine.fineAmount)}`);
+    }
+    toast(created.length ? `벌금 고지서 ${created.length}건 생성 완료` : "생성된 벌금 고지서가 없습니다.");
+    return;
+  }
   const lines=[];
   let total=0;
   const details=[];
@@ -2965,6 +4104,7 @@ window.runBulkStudentTransaction = async function(){
 }
 async function doTransfer(from,to,amount,desc="송금"){
   amount=money(amount); if(!from||!to||from===to||amount<=0) return false;
+  if(hasUnpaidFine(from)){toast("미납 벌금이 있어 개인 간 송금이 제한됩니다. 벌금부터 납부하세요."); return false;}
   if(!requireCash(from,amount)) return false;
   await addLedger("송금",desc,[{account:from,delta:-amount},{account:to,delta:amount}],{tax:0}); return true;
 }
@@ -2993,8 +4133,31 @@ window.payMyLedgerTax = async function(id){
 }
 window.chargeFine = async function(){
   const id=document.getElementById("fineStudent").value; if(!id) return toast("학생 선택");
-  const amount=fineAmount(id); if(amount<=0||!requireCash(id,amount)) return;
-  await addLedger("벌금",document.getElementById("fineDesc").value||"벌금",[{account:id,delta:-amount},{account:CENTRAL,delta:amount}]); toast("벌금 완료");
+  const fine=await createFineNotice(id,{reason:document.getElementById("fineDesc")?.value||"수동 벌금",createdBy:"teacher"});
+  toast(fine ? `벌금 고지서 생성 완료: ${won(fine.fineAmount)}` : "벌금 고지서를 만들 수 없습니다.");
+}
+window.payFineNotice = async function(fineId){
+  const f=obj(data.fines)[fineId];
+  if(!f || !f.studentId) return toast("벌금 고지서를 찾을 수 없습니다.");
+  if(selectedStudent && mode==="student" && f.studentId!==selectedStudent) return toast("내 벌금만 납부할 수 있습니다.");
+  const remain=remainingFineAmount(f);
+  if(remain<=0) return toast("이미 납부 완료된 벌금입니다.");
+  const cash=money(balanceOf(f.studentId));
+  if(cash<=0) return toast("잔고가 부족합니다. 부분 납부도 할 수 없습니다.");
+  const pay=Math.min(cash,remain);
+  const paidAmount=money(n(f.paidAmount)+pay);
+  const remainingAmount=money(Math.max(0,n(f.fineAmount)-paidAmount));
+  const status=remainingAmount<=0 ? "paid" : "partial";
+  const updates={
+    [`fines/${fineId}/paidAmount`]:paidAmount,
+    [`fines/${fineId}/remainingAmount`]:remainingAmount,
+    [`fines/${fineId}/status`]:status,
+    [`fines/${fineId}/paymentSource`]:"personalCash"
+  };
+  if(status==="paid") updates[`fines/${fineId}/paidAt`]=new Date().toISOString();
+  await dbUpdate("",updates);
+  await addLedger("벌금납부",`${studentName(f.studentId)} ${f.reason||"벌금"} 납부`,[{account:f.studentId,delta:-pay},{account:CENTRAL,delta:pay}],{fineId,pay,remainingAmount});
+  toast(status==="paid" ? "벌금 전액 납부 완료" : `부분 납부 완료, 남은 금액 ${won(remainingAmount)}`);
 }
 window.collectMoney = async function(){
   const id=document.getElementById("collectStudent").value, amount=n(document.getElementById("collectAmount").value); if(!id||amount<=0||!requireCash(id,amount)) return;
@@ -3015,21 +4178,40 @@ window.chargeLedgerTax = async function(id){
 
 window.doWholesale = async function(){
   const buyer=document.getElementById("wholesaleBuyer").value, pid=document.getElementById("wholesaleProduct").value, qty=money(document.getElementById("wholesaleQty").value);
-  if(!buyer||qty<=0) return; const p=product(pid); const total=money(productPrice(p))*qty; if(!requireCash(buyer,total)) return;
+  if(!buyer||qty<=0) return; const p=product(pid); const unitPrice=productWholesalePrice(p); const total=unitPrice*qty; if(!requireCash(buyer,total)) return;
   const current=n(obj(obj(data.inventories)[buyer])[pid]);
   await dbSet(`inventories/${buyer}/${pid}`, current+qty);
-  await addLedger("도매구매",`${studentName(buyer)} ${p.name} 도매 ${qty}개`,[{account:buyer,delta:-total},{account:CENTRAL,delta:total}],{productId:pid,qty});
+  await addLedger("도매구매",`${studentName(buyer)} ${p.name} 도매 ${qty}개`,[{account:buyer,delta:-total},{account:CENTRAL,delta:total}],{productId:pid,qty,unitPrice,totalPrice:total,type:"snackWholesalePurchase"});
   toast("도매 구매 완료");
 }
 async function doRetailPurchase(buyer,seller,pid,qty,unitPrice){
-  qty=money(qty); unitPrice=money(unitPrice); if(!buyer||!seller||buyer===seller||qty<=0||unitPrice<=0) return false;
+  qty=money(qty); unitPrice=productPrice(product(pid)); if(!buyer||!seller||buyer===seller||qty<=0||unitPrice<=0) return false;
   const sellerInv=n(obj(obj(data.inventories)[seller])[pid]); if(sellerInv<qty){toast("소매상 재고 부족"); return false;}
   const subtotal=qty*unitPrice, tx=tax(subtotal), total=subtotal+tx; if(!requireCash(buyer,total)) return false;
   await dbSet(`inventories/${seller}/${pid}`, sellerInv-qty);
-  await addLedger("소매구매",`${studentName(buyer)} → ${studentName(seller)} ${product(pid)?.name} ${qty}개`,[{account:buyer,delta:-total},{account:seller,delta:subtotal},{account:CENTRAL,delta:tx}],{productId:pid,qty,unitPrice,tax:tx});
+  await addLedger("소매구매",`${studentName(buyer)} → ${studentName(seller)} ${product(pid)?.name} ${qty}개`,[{account:buyer,delta:-total},{account:seller,delta:subtotal},{account:CENTRAL,delta:tx}],{productId:pid,qty,unitPrice,totalPrice:subtotal,tax:tx,type:"snackRetailPurchase"});
   return true;
 }
 window.manualRetailPurchase = async function(){ if(await doRetailPurchase(document.getElementById("retailBuyer").value,document.getElementById("retailSeller").value,document.getElementById("retailProduct").value,n(document.getElementById("retailQty").value),n(document.getElementById("retailUnit").value))) toast("구매 완료"); }
+
+window.saveSnackProductPrices = async function(){
+  const updates={};
+  arr(data.products).forEach(raw=>{
+    const id=raw.id;
+    if(!id) return;
+    updates[`products/${id}/priceType`]=document.getElementById(`snack_${id}_priceType`)?.value || "economyIndex";
+    updates[`products/${id}/fixedPrice`]=money(document.getElementById(`snack_${id}_fixedPrice`)?.value);
+    updates[`products/${id}/basePrice`]=money(document.getElementById(`snack_${id}_basePrice`)?.value);
+    updates[`products/${id}/baseEconomyIndex`]=money(document.getElementById(`snack_${id}_baseEconomyIndex`)?.value)||100;
+    updates[`products/${id}/sensitivity`]=n(document.getElementById(`snack_${id}_sensitivity`)?.value)||1;
+    updates[`products/${id}/minPrice`]=money(document.getElementById(`snack_${id}_minPrice`)?.value)||1;
+    const max=document.getElementById(`snack_${id}_maxPrice`)?.value;
+    updates[`products/${id}/maxPrice`]=max==="" ? null : money(max);
+    updates[`products/${id}/wholesaleRate`]=n(document.getElementById(`snack_${id}_wholesaleRate`)?.value)||0.65;
+  });
+  await dbUpdate("",updates);
+  toast("과자 가격 설정 저장 완료");
+}
 
 window.updateTicket = async function(k,field,value){
   const t=ticketData(k); value=n(value);
@@ -3049,6 +4231,7 @@ window.updateTicket = async function(k,field,value){
 }
 async function doTicketBuy(studentId,k){
   if(!studentId||!ticketMeta[k]){toast("학생과 티켓을 확인하세요."); return false;}
+  if(hasUnpaidFine(studentId)){toast("미납 벌금이 있어 티켓 구매가 제한됩니다. 벌금부터 납부하세요."); return false;}
   const t=ticketData(k); if(n(t.stock)<=0){toast("티켓 재고가 없어 구매할 수 없습니다."); return false;}
   const price=ticketBuy(k); if(!requireCash(studentId,price)) return false;
   const holding=n(obj(obj(data.ticketHoldings)[studentId])[k]);
@@ -3237,7 +4420,7 @@ window.bankRejectLoan = async function(reqId){
 
 window.fillProductUnitPrice = function(){
   const id=document.getElementById("reqProduct")?.value; const p=product(id); const el=document.getElementById("reqUnit");
-  if(p && el) el.value = publicPrice(p) ?? money(productPrice(p));
+  if(p && el) el.value = productPrice(p);
 }
 window.saveBondRate = async function(){
   const rate=n(document.getElementById("teacherBondRate").value)/100;
@@ -3245,12 +4428,44 @@ window.saveBondRate = async function(){
   toast("채권 금리 저장 완료");
 }
 window.setStudentTab = function(tab){ studentTab=tab; localStorage.setItem("studentTab",tab); render(); }
+function peerDetailHtml(id){
+  const s=student(id); if(!s) return `<p class="small">학생을 찾을 수 없습니다.</p>`;
+  return `<div class="studentDetailGrid peerDetailGrid">
+    <div>
+      <div class="card peerAvatarCard">${avatarPreviewHtml(id)}</div>
+      <div class="card creditDetailCard" style="margin-top:12px">${creditSummaryCard(id)}</div>
+      <div class="card peerProfileCard" style="margin-top:12px">
+        <h3>${s.name}</h3>
+        <p class="small"><b>직업</b> ${studentJobName(s)||"없음"}</p>
+        <p class="small"><b>보유 상품</b> ${inventoryHtml(id)}</p>
+        <p class="small"><b>보유 티켓</b> ${ticketHtml(id)}</p>
+        <p class="small"><b>적용 미니룸</b> ${selectedRoomTemplate(id)?.icon||"🏠"} ${selectedRoomTemplate(id)?.name||"없음"}</p>
+      </div>
+    </div>
+    <div>
+      <div class="section" style="padding:0;margin:0;box-shadow:none;border:0">
+        <div class="head"><div><h3>자산 구성</h3><div class="sub">자산 정보는 표 대신 원형 그래프로 봅니다.</div></div></div>
+        ${assetPieHtml(id)}
+      </div>
+      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
+        <div class="head"><div><h3>최근 거래 내역</h3><div class="sub">최근 경제 활동 기록입니다.</div></div></div>
+        ${studentRecentLedgerHtml(id,25)}
+      </div>
+      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
+        <div class="head"><div><h3>일자별 소득</h3><div class="sub">날짜별 입금 합계입니다.</div></div></div>
+        ${studentDailyIncomeHtml(id)}
+      </div>
+    </div>
+  </div>`;
+}
 window.showPeerInfo = function(id){
   const s=student(id); if(!s) return;
   const c=creditScoreInfo(id);
-  document.getElementById("detailTitle").textContent=`${s.name} 상세 보기`;
-  document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · 재산 ${rankOfStudent(id)}위 · 신용 ${c.grade} ${c.score}점`;
-  document.getElementById("detailBody").innerHTML=studentDetailHtml(id,true);
+  const rank=rankOfStudent(id);
+  const rankText=rank==="-" ? "개인 순위 제외" : `개인 재산 ${rank}위`;
+  document.getElementById("detailTitle").textContent=`${s.name} 구경하기`;
+  document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · ${rankText} · 신용 ${c.grade} ${c.score}점`;
+  document.getElementById("detailBody").innerHTML=peerDetailHtml(id);
   document.getElementById("detailModal").classList.remove("hidden");
 }
 window.studentLogin = function(){
@@ -3374,7 +4589,8 @@ window.requestTransfer = async function(){
   if(await doTransfer(r.studentId,r.to,r.amount,"학생 직접 송금")) toast("송금 완료");
 }
 window.requestRetailBuy = async function(){
-  const r={type:"retailBuy",studentId:selectedStudent,seller:document.getElementById("reqSeller")?.value,productId:document.getElementById("reqProduct")?.value,qty:n(document.getElementById("reqQty")?.value),unitPrice:n(document.getElementById("reqUnit")?.value)};
+  const productId=document.getElementById("reqProduct")?.value;
+  const r={type:"retailBuy",studentId:selectedStudent,seller:document.getElementById("reqSeller")?.value,productId,qty:n(document.getElementById("reqQty")?.value),unitPrice:productPrice(product(productId))};
   const total=requestNeededCash(r);
   if(!validateRequestBalance(r)) return;
   if(!confirmPurchaseMessage(`${product(r.productId)?.name||"상품"} ${r.qty}개 구매 신청`, total)) return;
@@ -3471,54 +4687,120 @@ function drawLineChart(series, labels){
 }
 function drawTotalIncomeChart(rows){
   const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,pad={l:96,r:34,t:42,b:104};
+  const W=canvas.width,H=canvas.height,pad={l:112,r:40,t:46,b:104};
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#111827'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#f8fafc'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
   if(!rows.length){
-    ctx.fillStyle='#cbd5e1'; ctx.font='20px system-ui'; ctx.textAlign='center'; ctx.fillText('표시할 총소득 기록이 없습니다.',W/2,H/2);
+    ctx.fillStyle='#64748b'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText('표시할 전체 열매 보유량 기록이 없습니다.',W/2,H/2);
     return;
   }
-  const vals=rows.map(r=>n(r.income));
+  const vals=rows.map(r=>n(r.totalHoldings));
   let min=Math.min(...vals), max=Math.max(...vals);
   if(max===min){max+=1; min=Math.max(0,min-1);}
   const extra=(max-min)*0.12 || 1; min=Math.max(0,min-extra); max+=extra;
   const range=max-min;
   const xFor=i=>pad.l+(W-pad.l-pad.r)*(rows.length===1?0.5:i/(rows.length-1));
   const yFor=v=>pad.t+(H-pad.t-pad.b)*(1-(v-min)/range);
-  ctx.strokeStyle='rgba(148,163,184,.28)'; ctx.lineWidth=1; ctx.fillStyle='#cbd5e1'; ctx.font='13px system-ui'; ctx.textAlign='right';
+  ctx.strokeStyle='rgba(148,163,184,.35)'; ctx.lineWidth=1.2; ctx.fillStyle='#475569'; ctx.font='16px system-ui'; ctx.textAlign='right';
   for(let i=0;i<=6;i++){
     const y=pad.t+(H-pad.t-pad.b)*i/6;
     const val=max-range*i/6;
     ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
     ctx.fillText(Math.round(val).toLocaleString('ko-KR'),pad.l-12,y+5);
   }
-  ctx.strokeStyle='#93c5fd'; ctx.lineWidth=5; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='#2563eb'; ctx.lineWidth=7; ctx.lineJoin='round'; ctx.lineCap='round';
   ctx.beginPath();
-  rows.forEach((r,i)=>{const x=xFor(i), y=yFor(r.income); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);});
+  rows.forEach((r,i)=>{const x=xFor(i), y=yFor(r.totalHoldings); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);});
   ctx.stroke();
-  rows.forEach((r,i)=>{ctx.fillStyle='#60a5fa'; ctx.beginPath(); ctx.arc(xFor(i),yFor(r.income),5,0,Math.PI*2); ctx.fill();});
+  rows.forEach((r,i)=>{
+    const x=xFor(i), y=yFor(r.totalHoldings);
+    ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#2563eb'; ctx.lineWidth=4; ctx.stroke();
+  });
   const labelEvery=Math.max(1,Math.ceil(rows.length/10));
   rows.forEach((r,i)=>{
     if(i%labelEvery!==0 && i!==rows.length-1) return;
     ctx.save(); ctx.translate(xFor(i),H-62); ctx.rotate(-Math.PI/4);
-    ctx.fillStyle='#e2e8f0'; ctx.font='13px system-ui'; ctx.textAlign='right';
+    ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='right';
     ctx.fillText(r.day.slice(5).replace('-','/'),0,0);
     ctx.restore();
   });
   const last=rows[rows.length-1];
-  ctx.fillStyle='#e2e8f0'; ctx.font='13px system-ui'; ctx.textAlign='left';
-  ctx.fillText('총소득 지표 = 전체 청소 면제권 기준가',pad.l,H-24);
-  ctx.textAlign='right'; ctx.font='700 13px system-ui';
-  ctx.fillText(`최근 값 ${won(last.income)} · 전체 ${rows.length}일`,W-pad.r,H-24);
+  const prev=rows[rows.length-2];
+  const diff=prev ? n(last.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='left';
+  ctx.fillText('전체 열매 = 학생 지갑 + 예금 + 적금 + 채권 + 단체 현금',pad.l,H-24);
+  ctx.textAlign='right'; ctx.font='800 16px system-ui';
+  ctx.fillStyle=diff>=0?'#16a34a':'#dc2626';
+  ctx.fillText(`최근 ${won(last.totalHoldings)} · ${signedWon(diff)} (${pct(rate)})`,W-pad.r,H-24);
 }
-function showTotalIncomeChart(){
-  const rows=classCleanIncomeRows(null);
-  document.getElementById('chartTitle').textContent='일자별 총소득 차트';
-  document.getElementById('chartSub').textContent='전체 청소 면제권 기준가를 총소득 지표로 표시합니다.';
+function showTotalIncomeChart(limit=null){
+  const rows=economyHistoryRows(limit || null);
+  document.getElementById('chartTitle').textContent='전체 열매 보유량 변화';
+  document.getElementById('chartSub').textContent='날짜별 전체 보유량, 전날 대비 변화량, 등락률을 확인합니다.';
   drawTotalIncomeChart(rows);
   document.getElementById('chartModal').classList.remove('hidden');
 }
+window.showEconomyHelp = function(){
+  const title=document.getElementById("detailTitle");
+  const sub=document.getElementById("detailSub");
+  const body=document.getElementById("detailBody");
+  if(title) title.textContent="우리 반 경제지수 도움말";
+  if(sub) sub.textContent="전체 열매 보유량과 티켓 가격이 정해지는 방식";
+  if(body) body.innerHTML=`<div class="economyHelpBox">
+    <p>우리 반 경제지수는 우리 반 전체가 가진 열매의 총합입니다.</p>
+    <p>전체 열매가 많아지면 우리 반 경제가 커진 것이고, 전체 열매가 줄어들면 세금, 티켓, 과자 구매 등으로 열매가 많이 사라진 것입니다.</p>
+    <p>티켓 가격은 세 가지 힘으로 정해집니다.</p>
+    <ol>
+      <li>우리 반 전체가 얼마나 부자인가</li>
+      <li>오늘 새로 열매가 얼마나 풀렸는가</li>
+      <li>사고 싶은 사람이 많은가, 팔고 싶은 사람이 많은가</li>
+    </ol>
+    <p>하지만 가격이 하루 만에 너무 많이 오르거나 떨어지지 않도록 안전장치가 있습니다.</p>
+  </div>`;
+  document.getElementById("detailModal")?.classList.remove("hidden");
+}
+
+window.showCreditHelp = function(){
+  const title=document.getElementById("detailTitle");
+  const sub=document.getElementById("detailSub");
+  const body=document.getElementById("detailBody");
+  if(title) title.textContent="신용도 도움말";
+  if(sub) sub.textContent="경제교실에서 돈·약속·역할을 얼마나 믿고 맡길 수 있는지 보여주는 점수";
+  if(body) body.innerHTML=`<div class="economyHelpBox creditHelpBox">
+    <p><b>신용도</b>는 벌점이 아니라, 경제교실에서 돈·약속·역할을 믿고 맡길 수 있는 정도입니다.</p>
+    <div class="scroll"><table><thead><tr><th>등급</th><th>점수</th><th>의미</th></tr></thead><tbody>
+      <tr><td><b>S</b></td><td>900~1000</td><td>매우 신뢰 가능</td></tr>
+      <tr><td><b>A</b></td><td>800~899</td><td>신뢰 높음</td></tr>
+      <tr><td><b>B</b></td><td>700~799</td><td>보통</td></tr>
+      <tr><td><b>C</b></td><td>600~699</td><td>주의</td></tr>
+      <tr><td><b>D</b></td><td>500~599</td><td>위험</td></tr>
+      <tr><td><b>E</b></td><td>300~499</td><td>신용 제한</td></tr>
+    </tbody></table></div>
+    <h3>신용도가 내려가는 경우</h3>
+    <ol>
+      <li>경고를 받거나 같은 문제가 반복될 때</li>
+      <li>직업 역할을 하지 않아 직무유기 단계가 올라갈 때</li>
+      <li>벌금을 기한 안에 내지 않거나 미납 벌금이 남아 있을 때</li>
+      <li>세금 회피, 거래 약속 불이행, 법인 돈 사적 사용처럼 경제 약속을 어길 때</li>
+      <li>대출을 많이 사용해 갚아야 할 부담이 커질 때</li>
+    </ol>
+    <h3>신용도를 회복하는 방법</h3>
+    <ol>
+      <li>며칠 동안 경고 없이 생활하기</li>
+      <li>직업 역할을 성실하게 수행하기</li>
+      <li>벌금과 미납금을 납부하기</li>
+      <li>거래 약속, 세금 납부, 법인 회계 기록을 정확히 지키기</li>
+      <li>예금·적금·채권처럼 책임 있는 금융활동을 꾸준히 유지하기</li>
+    </ol>
+    <p>한 번 실수했다고 끝나는 것은 아닙니다. 성실하게 생활하고 미납금을 해결하면 신용도는 다시 올라갑니다.</p>
+    <p class="small">현재 신용도는 자산, 최근 소득, 경고 기록, 직무유기, 세금 적발, 대출 부담, 미납 벌금, 성실 회복 기록을 종합해 계산합니다.</p>
+  </div>`;
+  document.getElementById("detailModal")?.classList.remove("hidden");
+}
+
 function dailyProductCandles(productId){
   const h=historyWithNow().map(x=>{
     const has=!!(x.products && x.products[productId]);
@@ -3592,26 +4874,80 @@ function showProductChart(productId){
   drawCandles(candles);
   document.getElementById('chartModal').classList.remove('hidden');
 }
-function dailyTicketCandles(ticketId){
-  const h=historyWithNow().map(x=>{
-    const has=!!(x.tickets && x.tickets[ticketId]);
-    if(!has && x.id!=="now") return null;
-    return {day:(x.iso||"").slice(0,10)||today(), value:n(x.tickets?.[ticketId]?.buy ?? ticketBuy(ticketId))};
-  }).filter(Boolean).filter(x=>Number.isFinite(x.value));
+function dailyTicketPriceRows(ticketId,limit=30){
   const days={};
-  h.forEach(x=>{
-    if(!days[x.day]) days[x.day]={day:x.day,open:x.value,high:x.value,low:x.value,close:x.value};
-    days[x.day].high=Math.max(days[x.day].high,x.value);
-    days[x.day].low=Math.min(days[x.day].low,x.value);
-    days[x.day].close=x.value;
+  economyHistoryRows(null).forEach(r=>{
+    const info=obj(r.ticketPrices)[ticketId];
+    if(info && n(info.close)>0) days[r.day]={day:r.day,...info};
   });
-  return Object.values(days).sort((a,b)=>a.day.localeCompare(b.day)).slice(-16);
+  fullHistoryWithNow().forEach(x=>{
+    const day=(x.iso||"").slice(0,10)||today();
+    const info=obj(obj(x.tickets)[ticketId]);
+    if(info && n(info.buy)>0 && !days[day]){
+      const close=money(info.close ?? info.buy);
+      const open=money(info.open || close);
+      const change=money(close-open);
+      days[day]={day,open,close,high:money(info.high||Math.max(open,close)),low:money(info.low||Math.min(open,close)),change,changeRate:open>0?change/open*100:0,buyOrders:n(info.buyOrders),sellOrders:n(info.sellOrders)};
+    }
+  });
+  return Object.values(days).sort((a,b)=>a.day.localeCompare(b.day)).slice(limit ? -limit : undefined);
+}
+function drawTicketLineChart(rows,ticketId){
+  const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,pad={l:112,r:44,t:50,b:118};
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#f8fafc'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  if(!rows.length){
+    ctx.fillStyle='#64748b'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText('표시할 티켓 가격 기록이 없습니다.',W/2,H/2);
+    return;
+  }
+  const vals=rows.map(r=>n(r.close));
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if(max===min){max+=1; min=Math.max(0,min-1);}
+  const extra=(max-min)*0.14 || 1; min=Math.max(0,min-extra); max+=extra;
+  const range=max-min;
+  const xFor=i=>pad.l+(W-pad.l-pad.r)*(rows.length===1?0.5:i/(rows.length-1));
+  const yFor=v=>pad.t+(H-pad.t-pad.b)*(1-(v-min)/range);
+  ctx.strokeStyle='rgba(148,163,184,.35)'; ctx.lineWidth=1.2; ctx.fillStyle='#475569'; ctx.font='16px system-ui'; ctx.textAlign='right';
+  for(let i=0;i<=6;i++){
+    const y=pad.t+(H-pad.t-pad.b)*i/6;
+    const val=max-range*i/6;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillText(Math.round(val).toLocaleString('ko-KR'),pad.l-12,y+5);
+  }
+  const color=ticketMeta[ticketId]?.color || '#2563eb';
+  ctx.strokeStyle=color; ctx.lineWidth=7; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  rows.forEach((r,i)=>{const x=xFor(i), y=yFor(r.close); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);});
+  ctx.stroke();
+  rows.forEach((r,i)=>{
+    const x=xFor(i), y=yFor(r.close);
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=color; ctx.lineWidth=4; ctx.stroke();
+  });
+  const labelEvery=Math.max(1,Math.ceil(rows.length/10));
+  rows.forEach((r,i)=>{
+    if(i%labelEvery!==0 && i!==rows.length-1) return;
+    ctx.save(); ctx.translate(xFor(i),H-72); ctx.rotate(-Math.PI/4);
+    ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='right';
+    ctx.fillText(r.day.slice(5).replace('-','/'),0,0);
+    ctx.restore();
+  });
+  const last=rows[rows.length-1];
+  ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='left';
+  ctx.fillText('선 그래프: 하루 한 번 정해지는 티켓 가격에 맞춘 표시입니다.',pad.l,H-28);
+  ctx.textAlign='right'; ctx.font='800 16px system-ui';
+  ctx.fillStyle=n(last.change)>=0?'#16a34a':'#dc2626';
+  ctx.fillText(`${won(last.close)} · ${signedWon(last.change)} (${pct(last.changeRate)}) · 구매 ${n(last.buyOrders)} / 판매 ${n(last.sellOrders)}`,W-pad.r,H-28);
 }
 function showTicketChart(ticketId){
   const m=ticketMeta[ticketId];
-  document.getElementById('chartTitle').textContent=`${m.name} 구매가 캔들 차트`;
-  document.getElementById('chartSub').textContent='일자별 티켓 구매가 시가·고가·저가·종가';
-  drawCandles(dailyTicketCandles(ticketId));
+  const rows=dailyTicketPriceRows(ticketId,30);
+  const latest=rows[rows.length-1];
+  document.getElementById('chartTitle').textContent=`${m.name} 가격 차트`;
+  document.getElementById('chartSub').textContent=latest ? `${latest.day} 현재 ${won(latest.close)} · ${signedWon(latest.change)} / ${pct(latest.changeRate)} · 구매신청 ${n(latest.buyOrders)}명 · 판매신청 ${n(latest.sellOrders)}명` : '날짜별 티켓 가격';
+  drawTicketLineChart(rows,ticketId);
   document.getElementById('chartModal').classList.remove('hidden');
 }
 function hideChart(){ document.getElementById('chartModal').classList.add('hidden'); }
@@ -3745,26 +5081,22 @@ function historyTableHtml(){
 }
 function manualHistoryBase(date){
   const d=date || today();
-  return {id:"h_manual_"+d+"_"+Date.now().toString(36),at:d+" 수동",iso:d+"T12:00:00.000Z",previousIncome:n(data.previousIncome),todayIncome:todayY(),tickets:{},products:{},manual:true};
+  return {id:"h_manual_"+d+"_"+Date.now().toString(36),at:d+" 수동",iso:d+"T12:00:00.000Z",previousIncome:n(data.previousIncome),todayIncome:todayY(),economyStats:{...currentEconomyStats(d),date:d},tickets:{},products:{},manual:true};
 }
 
 window.addIncomeBasedPriceHistory = async function(){
   const date=document.getElementById("incomePriceDate")?.value || today();
-  const income=money(document.getElementById("incomePriceValue")?.value);
-  if(income<0) return toast("소득을 확인하세요.");
+  const economyIndex=money(document.getElementById("incomePriceValue")?.value);
+  if(economyIndex<0) return toast("경제지수를 확인하세요.");
   const snap=manualHistoryBase(date);
-  snap.previousIncome=income;
-  snap.todayIncome=income;
-  snap.source="income";
+  snap.economyStats={...snap.economyStats,totalHoldings:economyIndex};
+  snap.source="economyIndex";
   arr(data.products).forEach(p=>{
-    const price=money(productPriceAtIncome(p,income));
-    snap.products[p.id]={price,publicPrice:publicPriceAtIncome(p,income)};
-  });
-  Object.keys(ticketMeta).forEach(k=>{
-    snap.tickets[k]={base:money(ticketBaseAtIncome(k,income)),buy:ticketBuyAtIncome(k,income),sell:ticketSellAtIncome(k,income)};
+    const price=money(productPriceAtEconomyIndex(p,economyIndex));
+    snap.products[p.id]={price,publicPrice:publicPriceAtEconomyIndex(p,economyIndex)};
   });
   await dbSet("history/"+snap.id,snap);
-  toast("소득 기준 가격 기록 추가 완료");
+  toast("경제지수 기준 가격 기록 추가 완료");
 }
 function marketListingId(){return "m_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6)}
 function nextIndustryAction(studentId,action){
@@ -4055,6 +5387,347 @@ window.buyMarketListing = async function(id){
   toast("거래 완료");
 }
 
+
+
+function corporationStudentHtml(studentId){
+  const holdings=studentCorporationShares(studentId);
+  const total=holdings.reduce((sum,h)=>sum+n(h.value),0);
+  return `<div class="section corporationStudentTop">
+    <div class="head"><div><h2>법인 업무</h2><div class="sub">법인 직업을 가진 계정만 볼 수 있는 법인 운영 화면입니다.</div></div><div>${currentAssetPill(studentId)}</div></div>
+    <div class="grid g3">
+      <div class="tabletStat purple"><span>법인 주식 공식가치</span><b>${won(total)}</b><em>벌금 산정에는 공식가 기준</em></div>
+      <div class="tabletStat blue"><span>보유 법인 수</span><b>${holdings.length}개</b><em>주식 1장 = 지분 1%</em></div>
+      <div class="tabletStat orange"><span>미납 벌금</span><b>${won(unpaidFinesForStudent(studentId).reduce((a,f)=>a+remainingFineAmount(f),0))}</b><em>주식 판매 시 우선 납부</em></div>
+    </div>
+    <p class="small">벌금 계산에는 시장에서 사고파는 가격이 아니라 법인의 공식 주식 가격이 사용됩니다. 벌금은 경고 2회 시점에 확정되므로 나중에 주식을 팔아도 이미 나온 벌금은 줄어들지 않습니다.</p>
+  </div>
+  <div class="section"><div class="head"><div><h2>내 보유 주식</h2><div class="sub">보유 주식, 지분율, 공식가치를 확인하고 매도 등록할 수 있습니다.</div></div></div>${studentCorporationHoldingsHtml(studentId)}</div>
+  <div class="section"><div class="head"><div><h2>법인 주식 시장</h2><div class="sub">친구들이 올린 법인 주식 매물을 구매합니다.</div></div></div>${shareMarketHtml(studentId)}</div>
+  <div class="section"><div class="head"><div><h2>전체 법인 정보</h2><div class="sub">대표, 공식 주가, 주주 구성을 확인합니다.</div></div></div><div class="corporationCardGrid">${corporations().map(c=>corporationDetailCardHtml(c,studentId,false)).join("") || `<p class="small">등록된 법인이 없습니다.</p>`}</div></div>`;
+}
+function studentCorporationHoldingsHtml(studentId){
+  const rows=studentCorporationShares(studentId);
+  if(!rows.length) return `<p class="small">보유한 법인 주식이 없습니다.</p>`;
+  return `<div class="corporationHoldingGrid">${rows.map(({corporation:c,shares,value})=>`
+    <div class="corpHoldingCard">
+      <div class="head"><div><h3>${c.name}</h3><div class="sub">${c.representativeStudentId===studentId?"대표":"주주"}</div></div><span class="pill ${c.representativeStudentId===studentId?'green':'blue'}">${shares}장</span></div>
+      <div class="corpShareBig">${shares}%</div>
+      <p>공식 주가 ${won(c.officialSharePrice)} · 내 공식가치 <b>${won(value)}</b></p>
+      <div class="field"><label>매도 수량</label><input id="shareSellQty_${c.id}" type="number" min="1" max="${availableCorporationShares(studentId,c.id)}" value="1"></div>
+      <div class="field"><label>1장당 판매가</label><input id="shareSellPrice_${c.id}" type="number" value="${Math.max(1,c.officialSharePrice)}"></div>
+      <button class="orange" onclick="createShareSellOrder('${c.id}')">주식 매도 등록</button>
+      <div class="small">판매 가능 ${availableCorporationShares(studentId,c.id)}장 · 이미 매도 등록한 수량은 제외됩니다.</div>
+    </div>`).join("")}</div>`;
+}
+function shareMarketHtml(viewerId,corpId=""){
+  const list=openShareSellOrders().filter(o=>!corpId || o.corporationId===corpId);
+  if(!list.length) return `<p class="small">현재 매도 중인 법인 주식이 없습니다.</p>`;
+  return `<div class="scroll"><table class="shareMarketTable"><thead><tr><th>법인</th><th>판매자</th><th class="num">수량</th><th class="num">1장 가격</th><th class="num">총액</th><th>상태</th><th>처리</th></tr></thead><tbody>${list.map(o=>{
+    const c=corporationById(o.corporationId);
+    const mine=o.sellerStudentId===viewerId;
+    return `<tr><td><b>${c?.name||o.corporationId}</b><div class="small">공식가 ${won(c?.officialSharePrice||0)}</div></td><td>${studentName(o.sellerStudentId)}</td><td class="num">${n(o.shareAmount)}장</td><td class="num">${won(o.pricePerShare)}</td><td class="num"><b>${won(o.totalPrice)}</b></td><td>${unpaidFinesForStudent(o.sellerStudentId).length?`<span class="pill orange">벌금 우선납부</span>`:`<span class="pill blue">판매중</span>`}</td><td>${mine?`<button class="danger compactBtn" onclick="cancelShareSellOrder('${o.id}')">취소</button>`:`<button class="green compactBtn" onclick="buyShareSellOrder('${o.id}')">구매</button>`}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function corporationDetailCardHtml(c,viewerId="",teacher=false){
+  const rows=Object.entries(c.shareholders).sort((a,b)=>n(b[1])-n(a[1]) || studentName(a[0]).localeCompare(studentName(b[0]),"ko"));
+  const warn=c.shareTotal!==100?`<span class="pill red">주식합계 ${c.shareTotal}장 확인 필요</span>`:`<span class="pill green">100장</span>`;
+  return `<div class="corpDetailCard">
+    <div class="head"><div><h3>${c.name}</h3><div class="sub">대표 ${studentName(c.representativeStudentId)}</div></div>${warn}</div>
+    <div class="grid g3 miniCorpStats">
+      <div><span>순자산</span><b>${won(c.netAssetValue)}</b></div>
+      <div><span>공식 주가</span><b>${won(c.officialSharePrice)}</b></div>
+      <div><span>현금</span><b>${won(corporationCashBalance(c))}</b></div>
+    </div>
+    <div class="scroll"><table><thead><tr><th>주주</th><th class="num">주식</th><th class="num">지분</th><th class="num">공식가치</th></tr></thead><tbody>${rows.map(([sid,shares])=>`<tr><td>${studentName(sid)}${sid===c.representativeStudentId?` <span class="pill green">대표</span>`:""}</td><td class="num">${shares}장</td><td class="num">${shares}%</td><td class="num">${won(n(shares)*c.officialSharePrice)}</td></tr>`).join("") || `<tr><td colspan="4">주주 없음</td></tr>`}</tbody></table></div>
+    ${shareMarketHtml(viewerId,c.id)}
+    ${teacher?`<div class="toolbar"><button onclick="initializeCorporationShares('${c.id}')">100장 균등 배분</button><button class="blue" onclick="recalculateCorporationValue('${c.id}')">공식가 재계산</button><button class="orange" onclick="editCorporationShares('${c.id}')">주식 수동 수정</button><button class="green" onclick="setCorporationRepresentativeManual('${c.id}')">대표 수동 지정</button></div>`:""}
+  </div>`;
+}
+function corporationOptions(){
+  const rows=corporations();
+  if(!rows.length) return `<option value="">법인 없음</option>`;
+  return rows.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+}
+function multiStudentOptions(){return students().map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
+function multiStudentCheckboxes(id,excludeId=""){
+  const rows=students().filter(s=>s.id!==excludeId);
+  if(!rows.length) return `<p class="small">선택할 학생이 없습니다.</p>`;
+  return `<div class="memberPicker" id="${id}Picker">${rows.map(s=>`<label class="memberPick"><input type="checkbox" data-member-picker="${id}" value="${s.id}"><span>${s.name}</span><em>${s.id}</em></label>`).join("")}</div><div class="miniToolbar"><button type="button" class="compactBtn" onclick="setMemberPicker('${id}',true)">전체 선택</button><button type="button" class="compactBtn" onclick="setMemberPicker('${id}',false)">전체 해제</button></div>`;
+}
+window.setMemberPicker=function(id,checked){
+  document.querySelectorAll(`input[data-member-picker="${id}"]`).forEach(cb=>{cb.checked=!!checked;});
+}
+function memberPickerValues(id){
+  return Array.from(document.querySelectorAll(`input[data-member-picker="${id}"]:checked`)).map(o=>o.value).filter(Boolean);
+}
+function corporationAccountStudents(){return students().filter(s=>isCorporationAssignedStudent(s.id))}
+function corporationAccountStudentOptions(){
+  const rows=corporationAccountStudents();
+  if(!rows.length) return `<option value="">직업이 법인인 학생 계정 없음</option>`;
+  return rows.map(s=>`<option value="${s.id}">${s.name} (${s.id})${corporationRaw(s.id)?" · 전환됨":""}</option>`).join("");
+}
+function corporationAccountConversionSummaryHtml(){
+  const rows=corporationAccountStudents();
+  if(!rows.length) return `<p class="small">직업이 법인인 학생 계정이 없습니다. 학생 직업에 ‘법인’ 또는 법인 직업을 먼저 배정하세요.</p>`;
+  return `<div class="scroll miniScroll"><table><thead><tr><th>법인 계정</th><th>상태</th><th class="num">계좌 잔고</th><th>연결 법인</th></tr></thead><tbody>${rows.map(s=>{
+    const c=corporationById(s.id);
+    return `<tr><td><b>${s.name}</b><div class="small">${s.id}</div></td><td>${c?`<span class="pill green">전환 완료</span>`:`<span class="pill orange">전환 필요</span>`}</td><td class="num">${won(balanceOf(s.id))}</td><td>${c?`${c.name}<div class="small">대표 ${studentName(c.representativeStudentId)||"미정"} · 공식가 ${won(c.officialSharePrice)}</div>`:`-`}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function membersObjectFromIds(ids){return ids.reduce((o,id)=>{ if(student(id)) o[id]=true; return o; },{})}
+function uniqueExistingMemberIds(ids,excludeId=""){return [...new Set(ids.filter(id=>student(id) && id!==excludeId))]}
+function corporationShareholdersFromSelectedMembers(memberIds,preferredId=""){
+  const ids=uniqueExistingMemberIds(memberIds);
+  return distributeShares(ids, preferredId && ids.includes(preferredId) ? preferredId : ids[0]);
+}
+function corporationAdminTableHtml(){
+  const rows=corporations();
+  if(!rows.length) return `<p class="small">등록된 법인이 없습니다. 먼저 법인을 만들어 주세요.</p>`;
+  return `<div class="corporationCardGrid">${rows.map(c=>corporationDetailCardHtml(c,"",true)).join("")}</div>`;
+}
+function renderCorporations(){
+  const el=document.getElementById("corporations");
+  if(!el) return;
+  el.innerHTML=`<div class="section"><div class="head"><div><h2>법인·주식 관리</h2><div class="sub">법인 1개는 주식 100장을 가지며, 가장 많은 주식을 가진 학생이 대표입니다.</div></div><span class="pill purple">주식 100장</span></div>
+    <div class="grid g3">
+      <div class="card"><h3>법인 만들기</h3><div class="field"><label>법인명</label><input id="newCorpName" placeholder="예: 오삼상사"></div><div class="field"><label>법인 계좌 ID 선택</label><input id="newCorpAccountId" placeholder="비워두면 자동 생성"></div><div class="field"><label>창립 구성원</label>${multiStudentCheckboxes("newCorpMembers")}</div><button class="primary" onclick="createCorporation()">법인 생성</button><p class="small">여러 명을 체크하면 구성원에게 주식 100장을 균등 배분합니다. 나누어떨어지지 않는 1장은 첫 구성원에게 배분됩니다.</p></div>
+      <div class="card"><h3>기존 법인계정 전환</h3><p class="small">이미 학생으로 등록돼 있고 직업이 ‘법인’인 계정을 실제 법인 데이터로 전환합니다. 기존 잔고는 법인 계좌 잔고로 그대로 사용됩니다.</p><div class="field"><label>전환할 법인 계정</label><select id="convertCorpAccountId">${corporationAccountStudentOptions()}</select></div><div class="field"><label>주식을 나눌 실제 구성원</label>${multiStudentCheckboxes("convertCorpMembers")}</div><button class="orange" onclick="convertCorporationAccountToCorporation()">선택 계정을 법인으로 전환</button><p class="small">여러 명을 체크하면 주식 100장이 선택한 구성원에게 균등 배분됩니다. 3명이면 34/33/33처럼 나뉩니다. 법인 계정 자체가 체크되어도 주주에서는 제외됩니다.</p></div>
+      <div class="card"><h3>공식가 재계산</h3><p class="small">법인 현금과 재고/채권/부채 값을 바탕으로 공식 주가를 다시 계산합니다.</p><div class="field"><label>법인</label><select id="corpRecalcId">${corporationOptions()}</select></div><button class="blue" onclick="recalculateCorporationValue(document.getElementById('corpRecalcId').value)">공식가 재계산</button></div>
+      <div class="card"><h3>주식 제도 안내</h3><p>주식 1장 = 지분 1%</p><p>대표 = 최다 주식 보유자</p><p>벌금 산정 = 시장가가 아니라 공식 주가 기준</p><p class="small">법인은 벌금을 피하기 위한 숨겨진 지갑이 아니라, 지분으로 평가되는 투자 자산입니다.</p></div>
+    </div>
+  </div>
+  <div class="section"><div class="head"><div><h2>직업이 법인인 학생 계정</h2><div class="sub">기존 공동계좌로 쓰던 학생 계정을 법인 데이터로 전환했는지 확인합니다.</div></div></div>${corporationAccountConversionSummaryHtml()}</div>
+  <div class="section"><div class="head"><div><h2>법인 목록</h2><div class="sub">주식 배분, 대표, 공식 주가를 확인합니다.</div></div></div>${corporationAdminTableHtml()}</div>
+  <div class="section"><div class="head"><div><h2>주식 매도 주문</h2><div class="sub">현재 열려 있는 법인 주식 매물입니다.</div></div></div>${shareMarketHtml("")}</div>`;
+}
+function rootBalance(root,id){return Object.values(root?.ledger||{}).reduce((sum,e)=>sum+Object.values(e?.lines||{}).filter(l=>l.account===id).reduce((a,l)=>a+n(l.delta),0),0)}
+function rootUnpaidFines(root,studentId){
+  return Object.values(root?.fines||{}).filter(f=>f && f.studentId===studentId && !["paid","cancelled"].includes(f.status||"unpaid") && Math.max(0,money(f.remainingAmount ?? (n(f.fineAmount)-n(f.paidAmount))))>0).sort((a,b)=>String(a.dueDate||a.issuedAt||"").localeCompare(String(b.dueDate||b.issuedAt||"")));
+}
+function rootAvailableShares(root,studentId,corpId){
+  const held=n(root?.corporations?.[corpId]?.shareholders?.[studentId]);
+  const open=Object.values(root?.shareSellOrders||{}).filter(o=>o && o.status==="open" && o.sellerStudentId===studentId && o.corporationId===corpId).reduce((sum,o)=>sum+n(o.shareAmount),0);
+  return Math.max(0,held-open);
+}
+function rootResolveRepresentative(c,current=""){
+  const rows=Object.entries(obj(c?.shareholders)).filter(([,v])=>n(v)>0).sort((a,b)=>n(b[1])-n(a[1]));
+  if(!rows.length) return "";
+  const max=n(rows[0][1]);
+  const leaders=rows.filter(([,v])=>n(v)===max).map(([id])=>id);
+  if(current && leaders.includes(current)) return current;
+  return leaders.length===1 ? leaders[0] : (current || leaders[0]);
+}
+function selectedValues(id){
+  const picked=memberPickerValues(id);
+  if(picked.length) return picked;
+  const el=document.getElementById(id);
+  if(el?.selectedOptions) return Array.from(el.selectedOptions).map(o=>o.value).filter(Boolean);
+  return [];
+}
+
+
+window.createCorporation = async function(){
+  const name=String(document.getElementById("newCorpName")?.value||"").trim();
+  const members=selectedValues("newCorpMembers");
+  const accountInput=String(document.getElementById("newCorpAccountId")?.value||"").trim();
+  if(!name) return toast("법인명을 입력하세요.");
+  if(!members.length) return toast("창립 구성원을 1명 이상 선택하세요.");
+  const id=(accountInput || `corp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,5)}`).replace(/[^a-zA-Z0-9_\-가-힣]/g,"_");
+  if(corporationRaw(id)) return toast("이미 존재하는 법인 ID입니다.");
+  const shareholders=distributeShares(members,members[0]);
+  const corp={id,name,totalShares:100,members:members.reduce((o,m)=>{o[m]=true;return o;},{}),shareholders,representativeStudentId:resolveCorporationRepresentative({shareholders},members[0]),cashAccountId:id,cashBalance:0,inventoryValue:0,receivables:0,debt:0,netAssetValue:0,officialSharePrice:0,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  await dbSet(`corporations/${id}`,corp);
+  toast("법인 생성 완료");
+}
+window.convertCorporationAccountToCorporation = async function(){
+  const accountId=String(document.getElementById("convertCorpAccountId")?.value||"").trim();
+  const members=selectedValues("convertCorpMembers").filter(id=>id!==accountId);
+  const account=student(accountId);
+  if(!accountId || !account) return toast("전환할 법인 계정을 선택하세요.");
+  if(!isCorporationAssignedStudent(accountId)) return toast("직업이 법인인 학생 계정만 전환할 수 있습니다.");
+  if(!members.length) return toast("주식을 나눌 실제 구성원을 1명 이상 선택하세요. 법인 계정 자체는 주주에서 제외됩니다.");
+  const exists=corporationRaw(accountId);
+  const shareholders=distributeShares(members,members[0]);
+  const rep=resolveCorporationRepresentative({shareholders},exists?.representativeStudentId || members[0]);
+  const cash=balanceOf(accountId);
+  const existing=obj(exists);
+  const net=money(cash+n(existing.inventoryValue)+n(existing.receivables)-n(existing.debt));
+  const corp={
+    ...existing,
+    id:accountId,
+    name:existing.name || account.name || `법인 ${accountId}`,
+    totalShares:100,
+    members:membersObjectFromIds(members),
+    shareholders,
+    representativeStudentId:rep,
+    cashAccountId:accountId,
+    cashBalance:cash,
+    inventoryValue:n(existing.inventoryValue),
+    receivables:n(existing.receivables),
+    debt:n(existing.debt),
+    netAssetValue:net,
+    officialSharePrice:money(net/100),
+    convertedFromStudentAccount:true,
+    updatedAt:new Date().toISOString(),
+    createdAt:existing.createdAt || new Date().toISOString()
+  };
+  const msg=exists
+    ? `${account.name} 법인 데이터가 이미 있습니다. 선택한 구성원 기준으로 주식 100장을 다시 배분할까요?`
+    : `${account.name} 학생 계정을 법인으로 전환할까요?
+기존 계좌 잔고 ${won(cash)}가 법인 현금으로 연결됩니다.`;
+  if(!confirm(msg)) return;
+  const updates={};
+  updates[`corporations/${accountId}`]=corp;
+  updates[`students/${accountId}/isCorporationAccount`]=true;
+  updates[`students/${accountId}/corporationId`]=accountId;
+  await dbUpdate("",updates);
+  toast(`${account.name} 법인 전환 완료`);
+}
+window.initializeCorporationShares = async function(corpId){
+  const c=corporationById(corpId);
+  if(!c) return toast("법인을 찾을 수 없습니다.");
+  const members=corporationMembers(c);
+  if(!members.length) return toast("구성원이 없어 균등 배분할 수 없습니다.");
+  if(!confirm(`${c.name} 주식 100장을 구성원에게 균등 배분할까요? 기존 주식 배분이 바뀝니다.`)) return;
+  const shareholders=distributeShares(members,c.representativeStudentId || members[0]);
+  const rep=resolveCorporationRepresentative({shareholders},c.representativeStudentId);
+  await dbUpdate(`corporations/${corpId}`,{totalShares:100,shareholders,representativeStudentId:rep,updatedAt:new Date().toISOString()});
+  toast("주식 100장 배분 완료");
+}
+window.recalculateCorporationValue = async function(corpId){
+  const c=corporationById(corpId);
+  if(!c) return toast("법인을 선택하세요.");
+  const net=corporationNetAssetValue(c);
+  const price=money(net/100);
+  await dbUpdate(`corporations/${corpId}`,{netAssetValue:net,officialSharePrice:price,updatedAt:new Date().toISOString()});
+  toast(`${c.name} 공식 주가 ${won(price)}로 재계산 완료`);
+}
+window.editCorporationShares = async function(corpId){
+  const c=corporationById(corpId);
+  if(!c) return toast("법인을 찾을 수 없습니다.");
+  const current=Object.entries(c.shareholders).map(([id,shares])=>`${id}:${shares}`).join("\n");
+  const input=prompt(`주식 수를 studentId:수량 형식으로 입력하세요. 총합은 반드시 100장이어야 합니다.\n\n학생ID 참고: ${students().map(s=>`${s.name}=${s.id}`).join(", ")}`,current);
+  if(input===null) return;
+  const shareholders={};
+  input.split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).forEach(line=>{
+    const [id,val]=line.split(":").map(x=>String(x||"").trim());
+    const shares=money(val);
+    if(id && student(id) && shares>0) shareholders[id]=shares;
+  });
+  const total=Object.values(shareholders).reduce((a,b)=>a+n(b),0);
+  if(total!==100) return toast(`주식 합계가 100장이 아닙니다. 현재 ${total}장`);
+  const rep=resolveCorporationRepresentative({shareholders},c.representativeStudentId);
+  const updates={shareholders,totalShares:100,representativeStudentId:rep,updatedAt:new Date().toISOString()};
+  await dbUpdate(`corporations/${corpId}`,updates);
+  toast("주식 배분 수정 완료");
+}
+window.setCorporationRepresentativeManual = async function(corpId){
+  const c=corporationById(corpId);
+  if(!c) return toast("법인을 찾을 수 없습니다.");
+  const input=prompt(`대표로 지정할 학생 ID를 입력하세요.\n${Object.keys(c.shareholders).map(id=>`${studentName(id)}=${id}`).join("\n")}`,c.representativeStudentId||"");
+  if(input===null) return;
+  const id=String(input).trim();
+  if(!student(id) || !n(c.shareholders[id])) return toast("해당 법인의 주주 학생 ID를 입력하세요.");
+  await dbUpdate(`corporations/${corpId}`,{representativeStudentId:id,updatedAt:new Date().toISOString()});
+  toast("대표 수동 지정 완료");
+}
+window.createShareSellOrder = async function(corpId){
+  const seller=selectedStudent;
+  const c=corporationById(corpId);
+  const qty=money(document.getElementById(`shareSellQty_${corpId}`)?.value);
+  const price=money(document.getElementById(`shareSellPrice_${corpId}`)?.value);
+  if(!seller||!c) return toast("법인 정보를 확인하세요.");
+  if(qty<=0 || price<=0) return toast("수량과 가격을 확인하세요.");
+  let error="";
+  const id=`share_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+  await runTransaction(rootRef, root=>{
+    if(!root) return root;
+    const corp=root.corporations?.[corpId];
+    if(!corp){error="법인을 찾을 수 없습니다."; return;}
+    const available=rootAvailableShares(root,seller,corpId);
+    if(available<qty){error=`판매 가능 주식이 부족합니다. 가능 ${available}장`; return;}
+    root.shareSellOrders=root.shareSellOrders||{};
+    root.shareSellOrders[id]={id,corporationId:corpId,sellerStudentId:seller,shareAmount:qty,pricePerShare:price,totalPrice:money(qty*price),status:"open",createdAt:new Date().toISOString()};
+    return root;
+  },{applyLocally:false});
+  if(error) return toast(error);
+  toast("주식 매도 등록 완료");
+}
+window.cancelShareSellOrder = async function(orderId){
+  const order=obj(data.shareSellOrders)[orderId];
+  if(!order || order.status!=="open") return toast("취소할 수 없는 주문입니다.");
+  if(mode!=="teacher" && order.sellerStudentId!==selectedStudent) return toast("내 주문만 취소할 수 있습니다.");
+  await dbUpdate(`shareSellOrders/${orderId}`,{status:"cancelled",cancelledAt:new Date().toISOString()});
+  toast("주식 매도 주문 취소 완료");
+}
+window.buyShareSellOrder = async function(orderId){
+  const buyer=selectedStudent;
+  const order=obj(data.shareSellOrders)[orderId];
+  if(!buyer || !order || order.status!=="open") return toast("구매할 수 없는 주문입니다.");
+  if(order.sellerStudentId===buyer) return toast("내 주식은 구매할 수 없습니다.");
+  if(!confirm(`${corporationById(order.corporationId)?.name||"법인"} 주식 ${n(order.shareAmount)}장을 ${won(order.totalPrice)}에 구매할까요?`)) return;
+  let error="";
+  const shareTxId=`sharetx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+  const ledgerId=`tx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+  const repHistoryId=`rep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+  const txTime=new Date().toISOString();
+  await runTransaction(rootRef, root=>{
+    if(!root) return root;
+    const o=root.shareSellOrders?.[orderId];
+    if(!o || o.status!=="open"){error="이미 처리된 주문입니다."; return;}
+    const corp=root.corporations?.[o.corporationId];
+    if(!corp){error="법인을 찾을 수 없습니다."; return;}
+    const seller=o.sellerStudentId;
+    const qty=money(o.shareAmount), total=money(o.totalPrice || n(o.pricePerShare)*qty);
+    if(seller===buyer){error="내 주식은 구매할 수 없습니다."; return;}
+    if(rootBalance(root,buyer)<total){error=`잔고 부족: 필요 ${won(total)}`; return;}
+    const held=n(corp.shareholders?.[seller]);
+    if(held<qty){error="판매자 주식 수가 부족합니다."; return;}
+    let finePaid=0;
+    let remainingSale=total;
+    root.fines=root.fines||{};
+    for(const f of rootUnpaidFines(root,seller)){
+      if(remainingSale<=0) break;
+      const remain=Math.max(0,money(f.remainingAmount ?? (n(f.fineAmount)-n(f.paidAmount))));
+      const pay=Math.min(remain,remainingSale);
+      if(pay<=0) continue;
+      f.paidAmount=money(n(f.paidAmount)+pay);
+      f.remainingAmount=money(remain-pay);
+      f.status=f.remainingAmount<=0?"paid":"partial";
+      if(f.status==="paid") f.paidAt=txTime;
+      f.paymentSource="share_sale_offset";
+      finePaid+=pay;
+      remainingSale-=pay;
+    }
+    root.corporations=root.corporations||{};
+    corp.shareholders=corp.shareholders||{};
+    corp.shareholders[seller]=held-qty;
+    if(corp.shareholders[seller]<=0) delete corp.shareholders[seller];
+    corp.shareholders[buyer]=n(corp.shareholders[buyer])+qty;
+    const prevRep=corp.representativeStudentId || "";
+    const nextRep=rootResolveRepresentative(corp,prevRep);
+    corp.representativeStudentId=nextRep || null;
+    corp.updatedAt=txTime;
+    if(nextRep && nextRep!==prevRep){
+      root.corporateRepresentativeHistory=root.corporateRepresentativeHistory||{};
+      root.corporateRepresentativeHistory[repHistoryId]={id:repHistoryId,corporationId:o.corporationId,previousRepresentativeStudentId:prevRep,newRepresentativeStudentId:nextRep,reason:"share_trade",changedAt:txTime};
+    }
+    o.status="completed";
+    o.buyerStudentId=buyer;
+    o.completedAt=txTime;
+    root.shareTransactions=root.shareTransactions||{};
+    root.shareTransactions[shareTxId]={id:shareTxId,corporationId:o.corporationId,sellerStudentId:seller,buyerStudentId:buyer,shareAmount:qty,pricePerShare:n(o.pricePerShare),totalPrice:total,sellerReceivedAmount:money(total-finePaid),finePaidAmountFromSale:finePaid,createdAt:txTime};
+    root.ledger=root.ledger||{};
+    const lines=[{account:buyer,delta:-total}];
+    if(total-finePaid>0) lines.push({account:seller,delta:money(total-finePaid)});
+    if(finePaid>0) lines.push({account:CENTRAL,delta:finePaid});
+    root.ledger[ledgerId]={id:ledgerId,ts:txTime,day:today(),type:"법인주식거래",desc:`${studentName(buyer)} → ${studentName(seller)} 법인 주식 구매`,lines,meta:{shareTransactionId:shareTxId,orderId,corporationId:o.corporationId,finePaidAmountFromSale:finePaid}};
+    return root;
+  },{applyLocally:false});
+  if(error) return toast(error);
+  toast("법인 주식 구매 완료");
+}
+
 window.addManualProductPrice = async function(){
   const date=document.getElementById("manualProductDate").value || today();
   const pid=document.getElementById("manualProductId").value;
@@ -4096,13 +5769,16 @@ window.clearPriceHistory = async function(){
   toast("가격 기록 전체 삭제 완료");
 }
 
-window.applyTodayAsPrevious = async function(){await recordSnapshot(); await dbSet("previousIncome",Math.max(0,todayY())); toast("적용 완료");}
+window.applyTodayAsPrevious = async function(){await recordSnapshot(); await dbSet("previousIncome",Math.max(0,currentEconomyStats(today()).issuedIncome)); toast("오늘 경제기록 저장 완료");}
 window.recordSnapshot = async function(){
+  const snap=currentHistorySnapshot();
   const id="h_"+Date.now().toString(36);
-  const snap={id,at:now(),iso:new Date().toISOString(),previousIncome:n(data.previousIncome),todayIncome:todayY(),tickets:{},products:{}};
-  Object.keys(ticketMeta).forEach(k=>snap.tickets[k]={base:basePrice(k),buy:ticketBuy(k),sell:ticketSell(k)});
+  snap.id=id;
+  snap.at=now();
+  snap.iso=new Date().toISOString();
   arr(data.products).forEach(p=>snap.products[p.id]={price:money(productPrice(p)),publicPrice:publicPrice(p)});
-  await dbSet("history/"+id,snap); toast("가격 기록 저장 완료");
+  await dbUpdate("",{[`history/${id}`]:snap,[`dailyEconomyStats/${today()}`]:snap.economyStats});
+  toast("가격·경제 기록 저장 완료");
 }
 
 window.repairTickets = async function(){
@@ -4181,7 +5857,11 @@ window.resetEconomyOnly = async function(){
     ticketHoldings:null,
     requests:null,
     marketListings:null,
+    shareSellOrders:null,
+    shareTransactions:null,
+    fines:null,
     history:null,
+    dailyEconomyStats:null,
     previousIncome:0,
     tickets:structuredClone(defaultData.tickets)
   };
@@ -4200,7 +5880,8 @@ window.cleanOldRequests = async function(hours=24){
 window.showStudentDetail = function(id){
   const s=student(id); if(!s) return toast("학생을 찾을 수 없습니다.");
   document.getElementById("detailTitle").textContent=`${s.name} 상세 관리`;
-  document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · 재산 ${rankOfStudent(id)}위`;
+  const rank=rankOfStudent(id);
+  document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · ${rank==="-"?"개인 순위 제외":`재산 ${rank}위`}`;
   document.getElementById("detailBody").innerHTML=studentDetailHtml(id);
   document.getElementById("detailModal").classList.remove("hidden");
 }
@@ -4226,7 +5907,7 @@ window.detailCollectStudent = async function(id){
 }
 
 window.saveSettings = async function(){
-  await dbUpdate("",{previousIncome:n(document.getElementById("setPrev").value),settings:{...data.settings,taxRate:n(document.getElementById("setTax").value)/100,fineRate:n(document.getElementById("setFine").value)/100,bondDays:n(document.getElementById("setBondDays").value),depositRate:n(document.getElementById("setDepositRate").value)/100,avatarCreatorRate:n(document.getElementById("setAvatarCreatorRate")?.value || avatarCreatorPercent())/100}});
+  await dbUpdate("",{previousIncome:n(document.getElementById("setPrev").value),settings:{...data.settings,taxRate:n(document.getElementById("setTax").value)/100,fineRate:n(document.getElementById("setFine").value)/100,fineMin:money(document.getElementById("setFineMin")?.value || 10),fineMax:money(document.getElementById("setFineMax")?.value || 0),bondDays:n(document.getElementById("setBondDays").value),depositRate:n(document.getElementById("setDepositRate").value)/100,avatarCreatorRate:n(document.getElementById("setAvatarCreatorRate")?.value || avatarCreatorPercent())/100}});
   toast("설정 저장 완료");
 }
 window.resetAll = async function(){if(confirm("정말 전체 데이터를 초기화할까요?")){await set(rootRef,defaultData); toast("초기화 완료");}}
@@ -4288,4 +5969,5 @@ window.setTab=setTab; window.setMode=setMode; window.toggleFullscreen=()=>{if(!d
 
 window.toast=toast;
 
+rebuildDerivedState();
 render();
