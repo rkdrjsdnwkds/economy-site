@@ -2578,3 +2578,6 @@ body:has(.exactPixelLoginPage) .wrap{
   .dashboardAssetPiePanel .assetPieSvgBox{width:190px!important;height:190px!important;}
   .dashboardAssetPiePanel .assetPieSvg{width:190px!important;height:190px!important;}
 }
+
+.miniHoldingList{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.miniHoldingChip{display:inline-flex;align-items:center;border:1px solid #e3cfb0;background:#fffaf0;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:800;color:#6a4624}

@@ -1140,6 +1140,19 @@ function studentAppHeaderHtml(s,id){
 function bondSumOf(id){return arr(data.bonds).filter(b=>b.owner===id&&b.status==="active").reduce((a,b)=>a+n(b.principal),0)}
 function ticketValueOf(id){return Object.entries(obj(obj(data.ticketHoldings)[id])).reduce((sum,[k,q])=>sum+n(q)*ticketSell(k),0)}
 function inventoryValueOf(id){return Object.entries(obj(obj(data.inventories)[id])).reduce((sum,[pid,q])=>sum+n(q)*(publicPrice(product(pid)) ?? money(productPrice(product(pid)))),0)}
+function inventoryHtml(id){
+  const items=Object.entries(obj(obj(data.inventories)[id])).filter(([,q])=>n(q)>0);
+  if(!items.length) return "없음";
+  return `<span class="miniHoldingList">${items.map(([pid,q])=>{
+    const p=product(pid);
+    return `<span class="miniHoldingChip">${p?.name||pid} ${n(q)}개</span>`;
+  }).join("")}</span>`;
+}
+function ticketHtml(id){
+  const items=Object.entries(obj(obj(data.ticketHoldings)[id])).filter(([,q])=>n(q)>0);
+  if(!items.length) return "없음";
+  return `<span class="miniHoldingList">${items.map(([key,q])=>`<span class="miniHoldingChip">${ticketMeta[key]?.name||key} ${n(q)}장</span>`).join("")}</span>`;
+}
 function totalAssetsOf(id){return balanceOf(id)+n(obj(data.deposits)[id])+savingsValueOf(id)+bondSumOf(id)+ticketValueOf(id)+inventoryValueOf(id)+corporateEquityValueOf(id)}
 function personalRankStudents(){
   return students().filter(s=>!isCorporationAssignedStudent(s.id));
