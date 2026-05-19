@@ -2078,6 +2078,32 @@ function bankRequestHistoryHtml(id,types){
   if(!list.length) return `<p class="small">진행 중인 신청이 없습니다.</p>`;
   return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${new Date(r.ts).toLocaleString("ko-KR")}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
 }
+function studentLedgerEntries(id,limit=20){
+  const rows=[...(obj(derived.ledgerByAccount)[id] || [])]
+    .map(e=>{
+      const delta=arr(e.lines).filter(l=>l.account===id).reduce((sum,l)=>sum+n(l.delta),0);
+      return {...e,delta:money(delta)};
+    })
+    .filter(e=>e.delta!==0)
+    .sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
+  return limit ? rows.slice(0,limit) : rows;
+}
+function studentTaxDueForLedger(e,id){
+  if(!e || !id) return 0;
+  if(!isStudentTradeLedger(e)) return 0;
+  if(ledgerTaxPaid(e) || obj(obj(e.meta).taxPaidBy)[id]) return 0;
+  const income=arr(e.lines)
+    .filter(l=>l.account===id && n(l.delta)>0)
+    .reduce((sum,l)=>sum+n(l.delta),0);
+  return income>0 ? tax(income) : 0;
+}
+function studentTaxPaidControl(e,id){
+  if(!isStudentTradeLedger(e)) return `<span class="small">-</span>`;
+  if(ledgerTaxPaid(e) || obj(obj(e.meta).taxPaidBy)[id]) return `<span class="pill green">납부완료</span>`;
+  const amount=studentTaxDueForLedger(e,id);
+  if(amount<=0) return `<span class="small">해당 없음</span>`;
+  return `<button class="orange studentTaxPayBtn" onclick="payMyLedgerTax('${e.id}')">${won(amount)} 납부</button>`;
+}
 function bankbookLedgerTableHtml(id){
   const rows=studentLedgerEntries(id,9999);
   if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
