@@ -2563,3 +2563,18 @@ body:has(.exactPixelLoginPage) .wrap{
   .peerAssetModal{grid-template-columns:1fr}
   .visitPage .rankTable{min-width:860px}
 }
+
+
+/* v90 대시보드 정리: 상단 자산 카드는 원형 그래프로 대체, 카드 요약은 하단으로 이동 */
+.dashboardAssetPiePanel .assetPieWrap{margin-top:4px!important;}
+.dashboardAssetPiePanel .assetPieSvgBox{width:230px!important;height:230px!important;}
+.dashboardAssetPiePanel .assetPieSvg{width:230px!important;height:230px!important;}
+.dashboardAssetChartPanel{margin-top:12px!important;}
+.dashboardHoldingsGrid{margin-top:12px!important;}
+.dashboardSummaryBottom{margin-top:14px!important;}
+.dashboardSummaryBottom .tabletStatGrid{margin-top:10px!important;}
+.studentEconomyIndexRow em{display:block;margin-top:6px;color:#64748b;font-size:12px;font-style:normal;font-weight:800;}
+@media(max-width:900px){
+  .dashboardAssetPiePanel .assetPieSvgBox{width:190px!important;height:190px!important;}
+  .dashboardAssetPiePanel .assetPieSvg{width:190px!important;height:190px!important;}
+}

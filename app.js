@@ -1343,17 +1343,19 @@ function studentCorporationAssetTableHtml(id){
 }
 
 function studentEconomyIndexHtml(){
-  const stats=currentEconomyStats(today());
-  const rows=economyHistoryRows(null).filter(r=>r.day<today());
+  const todayKey=today();
+  const stats=currentEconomyStats(todayKey);
+  const rows=economyHistoryRows(null,false).filter(r=>r.day<todayKey).sort((a,b)=>a.day.localeCompare(b.day));
   const prev=rows.length ? rows[rows.length-1] : null;
   const diff=prev ? n(stats.totalHoldings)-n(prev.totalHoldings) : 0;
   const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
-  const compareText=!prev ? "전날 데이터 없음" : !n(prev.totalHoldings) ? "-" : pct(rate);
+  const compareText=!prev ? "이전 기록 없음" : !n(prev.totalHoldings) ? "-" : pct(rate);
+  const compareSub=prev ? `${prev.day} 기준` : "경제기록 저장 후 다음 비교부터 표시";
   return `<div class="section studentEconomyIndex">
     <div class="head"><div><h2>우리 반 경제지수</h2><div class="sub">우리 반 전체가 가진 열매의 총합입니다.</div></div><button onclick="showEconomyHelp()">도움말</button></div>
     <div class="studentEconomyIndexRow">
       <div><span>현재 전체 열매</span><b>${won(stats.totalHoldings)}</b></div>
-      <div class="${diff>=0?'upText':'downText'}"><span>전날 대비</span><b>${compareText}</b></div>
+      <div class="${diff>=0?'upText':'downText'}"><span>최근 기록 대비</span><b>${compareText}</b><em>${compareSub}</em></div>
     </div>
   </div>`;
 }
@@ -1362,36 +1364,23 @@ function studentDashboardHtml(id){
     ${studentDashboardHeroHtml(id)}
     ${studentEconomyIndexHtml()}
     ${fineNoticeHtml(id)}
-    ${studentSummaryCardsHtml(id)}
+
+    <div class="section dashboardAssetPiePanel">
+      <div class="head"><div><h2>자산 구성</h2><div class="sub">현금, 예금, 채권, 티켓, 법인지분 비율을 원형 그래프로 봅니다.</div></div></div>
+      ${assetPieHtml(id)}
+    </div>
+
     <div class="section creditAndWarningPanel">
       <div class="head"><div><h2>신용도·경고 현황</h2><div class="sub">대출/카드 기능은 나중에 연결하고, 지금은 투자 활동 참고 지표로만 사용합니다.</div></div><button onclick="showCreditHelp()">도움말</button></div>
       <div class="creditWarningGrid">${creditSummaryCard(id)}<div class="card"><h3>경고 기록</h3>${roleWarningRowsForStudent(id)}</div></div>
     </div>
-    <div class="dashboardMainGrid">
-      <div class="section panelFill"><div class="head"><div><h2>자산/소득 추이</h2><div class="sub">내 자산 변동과 학급 총소득 흐름을 함께 봅니다.</div></div></div>${assetChartHtml(id)}</div>
-      <div class="section panelFill"><div class="head"><div><h2>최근 활동</h2><div class="sub">세금 납부가 필요한 거래도 바로 확인합니다.</div></div></div>${studentRecentLedgerHtml(id,6,true)}<h3 style="margin-top:14px">진행 중 요청</h3>${studentRequestSummaryHtml(id,4)}</div>
+
+    <div class="section panelFill dashboardAssetChartPanel">
+      <div class="head"><div><h2>자산 추이</h2><div class="sub">내 총자산 흐름을 그래프로 확인합니다.</div></div></div>
+      ${assetChartHtml(id)}
     </div>
-    <div class="dashboardBottomGrid">
-      <div class="section"><div class="head"><div><h2>추천 상품</h2><div class="sub">가격 차트를 눌러 흐름을 확인하세요.</div></div></div>${recommendedProductsHtml()}</div>
-      <div class="section missionCard"><h2>오늘 할 일</h2><p>시장 판매글을 확인하고, 필요한 신청은 바로 넣어두세요.</p>${studentQuickActionsHtml(id)}</div>
-    </div>
-    <div class="section mergedAssetPanel">
-      <div class="head"><div><h2>재산현황</h2><div class="sub">현금, 예금, 채권, 상품, 티켓 시세, 법인지분을 대시보드에서 함께 확인합니다.</div></div><div class="assetRank">${rankOfStudent(id)}위</div></div>
-      <div class="tabletStatGrid assetStatGrid">
-        <div class="tabletStat blue"><span>총자산</span><b>${won(totalAssetsOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
-        <div class="tabletStat green"><span>현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
-        <div class="tabletStat purple"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>승인 후 출금</em></div>
-        <div class="tabletStat orange"><span>채권</span><b>${won(bondSumOf(id))}</b><em>원금 기준</em></div>
-        <div class="tabletStat yellow"><span>티켓 시세 가치</span><b>${won(ticketValueOf(id))}</b><em>현재 판매가 기준</em></div>
-        <div class="tabletStat purple"><span>법인 지분 가치</span><b>${won(corporateEquityValueOf(id))}</b><em>공식 주가 기준</em></div>
-      </div>
-    </div>
-    <div class="section corporationAssetDashboardPanel">
-      <div class="head"><div><h2>보유 법인지분</h2><div class="sub">별도 법인 탭이 없어도 내 법인 주식은 재산으로 계산됩니다.</div></div></div>
-      ${studentCorporationAssetTableHtml(id)}
-    </div>
-    <div class="assetLayoutGrid">
-      <div class="section"><div class="head"><div><h2>자산 구성</h2><div class="sub">내 재산이 어디에 들어 있는지 한눈에 봅니다.</div></div></div>${assetPieHtml(id)}</div>
+
+    <div class="assetLayoutGrid dashboardHoldingsGrid">
       <div class="section assetHoldingsPanel"><div class="head"><div><h2>보유 현황</h2><div class="sub">상품, 티켓, 아바타, 미니룸 상태입니다.</div></div></div>
         <div class="card avatarMiniPanel">${avatarPreviewHtml(id)}</div>
         <p><b>보유 상품</b><br><span class="small">${inventoryHtml(id)}</span></p>
@@ -1400,120 +1389,15 @@ function studentDashboardHtml(id){
         <p><b>보유 아바타</b><br><span class="small">${avatarOwnedSummary(id)}</span></p>
         <p><b>적용 미니룸</b><br><span class="small">${selectedRoomTemplate(id)?.icon||"집"} ${selectedRoomTemplate(id)?.name||"없음"}</span></p>
       </div>
-    </div>
-    <div class="assetLayoutGrid">
-      <div class="section"><div class="head"><div><h2>일자별 소득</h2><div class="sub">날짜별로 학생에게 들어온 열매 합계입니다.</div></div></div>${studentDailyIncomeHtml(id)}</div>
-      <div class="section"><div class="head"><div><h2>최근 거래 내역</h2><div class="sub">내 거래의 세금 납부도 여기에서 처리합니다.</div></div></div>${studentRecentLedgerHtml(id,20,true)}</div>
-    </div>
-  </div>`;
-}
-
-function ticketStock(k){return n(ticketData(k).stock)}
-function ticketStockHtml(k){
-  const stock=ticketStock(k);
-  return `<span class="ticketStockBadge ${stock<=0?'zero':''}">재고 ${stock}장</span>`;
-}
-function ticketOptionsWithStock(){return Object.keys(ticketMeta).map(k=>`<option value="${k}">${ticketMeta[k].name} / 재고 ${ticketStock(k)}장</option>`).join("")}
-
-function inventoryHtml(id){
-  const inv=obj(obj(data.inventories)[id]);
-  const rows=Object.entries(inv).filter(([_,q])=>n(q)>0);
-  if(!rows.length) return "보유 상품 없음";
-  return rows.map(([pid,q])=>`${product(pid)?.name||pid} ${q}개`).join(" / ");
-}
-function ticketHtml(id){
-  const hold=obj(obj(data.ticketHoldings)[id]);
-  const rows=Object.keys(ticketMeta).filter(k=>n(hold[k])>0);
-  if(!rows.length) return "보유 티켓 없음";
-  return rows.map(k=>`${ticketMeta[k].name} ${hold[k]}장`).join(" / ");
-}
-
-
-function studentLedgerEntries(id,limit=30){
-  return [...(obj(derived.ledgerByAccount)[id] || [])]
-    .sort((a,b)=>(b.ts||"").localeCompare(a.ts||""))
-    .slice(0,limit)
-    .map(e=>{
-      const delta=arr(e.lines).filter(l=>l.account===id).reduce((s,l)=>s+n(l.delta),0);
-      return {...e,delta};
-    });
-}
-function studentRecentLedgerHtml(id,limit=20,showTaxControl=false){
-  const rows=studentLedgerEntries(id,limit);
-  if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
-  return `<div class="scroll recentLedger"><table><thead><tr><th>날짜</th><th>종류</th><th>내용</th><th class="num">변동</th>${showTaxControl?`<th>세금 납부</th>`:""}</tr></thead><tbody>${rows.map(e=>{
-    const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
-    return `<tr><td>${new Date(e.ts).toLocaleString("ko-KR")}</td><td><span class="pill">${e.type}</span></td><td>${e.desc||""}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td>${showTaxControl?`<td>${studentTaxPaidControl(e,id)}</td>`:""}</tr>`;
-  }).join("")}</tbody></table></div>`;
-}
-function studentTaxPaidControl(e,viewerId){
-  if(!viewerId || !isStudentTradeLedger(e) || !ledgerStudentParticipants(e).includes(viewerId)) return `<span class="small">-</span>`;
-  if(ledgerTaxPaid(e)) return `<span class="pill green">납부 완료</span>`;
-  const due=studentTaxDueForLedger(e,viewerId);
-  if(due<=0) return `<span class="small">납부 대상 아님</span>`;
-  return `<button class="orange studentTaxPayBtn" onclick="payMyLedgerTax('${e.id}')">세금 ${won(due)} 납부</button>`;
-}
-function studentTaxDueForLedger(e,viewerId){
-  if(!viewerId || !isStudentTradeLedger(e) || ledgerTaxPaid(e)) return 0;
-  const received=arr(e.lines).filter(l=>l.account===viewerId && n(l.delta)>0).reduce((sum,l)=>sum+n(l.delta),0);
-  return received>0 ? tax(received) : 0;
-}
-function allStudentLedgerHtml(limit=500){
-  const rows=[...(derived.ledger || [])].sort((a,b)=>(b.ts||"").localeCompare(a.ts||"")).slice(0,limit);
-  if(!rows.length) return `<p class="small">전체 거래 내역이 없습니다.</p>`;
-  return `<div class="scroll recentLedger allLedger"><table><thead><tr><th>날짜</th><th>종류</th><th>내용</th><th>거래 내용</th></tr></thead><tbody>${rows.map(e=>`<tr>
-    <td>${new Date(e.ts).toLocaleString("ko-KR")}</td>
-    <td><span class="pill">${e.type||"-"}</span></td>
-    <td>${e.desc||""}</td>
-    <td>${arr(e.lines).map(l=>{
-      const delta=n(l.delta), cls=delta>=0?"ledgerPlus":"ledgerMinus";
-      return `<span class="${cls}">${studentName(l.account)} ${delta>=0?"+":""}${won(delta)}</span>`;
-    }).join("<br>")}</td>
-  </tr>`).join("")}</tbody></table></div>`;
-}
-function studentHoldingsDetailHtml(id){
-  const activeBonds=arr(data.bonds).filter(b=>b.owner===id && b.status==="active");
-  return `<div class="assetList">
-    <div class="assetBox"><b>현금</b><div class="value">${won(balanceOf(id))}</div></div>
-    <div class="assetBox"><b>예금</b><div class="value">${won(obj(data.deposits)[id]||0)}</div></div>
-    <div class="assetBox"><b>채권</b><div class="value">${won(bondSumOf(id))}</div><div class="small">${activeBonds.length}개</div></div>
-    <div class="assetBox"><b>티켓 시세</b><div class="value">${won(ticketValueOf(id))}</div></div>
-    <div class="assetBox"><b>총자산</b><div class="value">${won(totalAssetsOf(id))}</div><div class="small">${rankOfStudent(id)}위</div></div>
-  </div>
-  <p><b>직업</b><br><span class="small">${studentJobName(student(id))||"없음"}</span></p>
-  <p><b>보유 상품</b><br><span class="small">${inventoryHtml(id)}</span></p>
-  <p><b>보유 티켓</b><br><span class="small">${ticketHtml(id)}</span></p>
-  <p><b>보유 아바타</b><br><span class="small">${avatarOwnedSummary(id)}</span></p>
-  <p><b>적용 미니룸</b><br><span class="small">${selectedRoomTemplate(id)?.icon||"🏠"} ${selectedRoomTemplate(id)?.name||"없음"}</span></p>`;
-}
-function studentDetailHtml(id, readOnly=false){
-  const s=student(id); if(!s) return `<p class="small">학생을 찾을 수 없습니다.</p>`;
-  return `<div class="studentDetailGrid">
-    <div>
-      <div class="card">${avatarPreviewHtml(id)}</div>
-      <div class="card creditDetailCard" style="margin-top:12px">${creditSummaryCard(id)}</div>
-      <div class="card" style="margin-top:12px">${studentHoldingsDetailHtml(id)}</div>
-    </div>
-    <div>
-      ${readOnly?"":`<div class="opsBox">
-        <h3>수동 처리</h3>
-        <div class="grid g2">
-          <div class="field"><label>금액</label><input id="detailAmount" type="number" value="10"></div>
-          <div class="field"><label>내용</label><input id="detailDesc" value="학생 상세 처리"></div>
-        </div>
-        <div class="toolbar">
-          <button class="blue" onclick="detailPayStudent('${id}')">지급</button>
-          <button class="orange" onclick="detailCollectStudent('${id}')">회수</button>
-        </div>
-      </div>`}
-      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
-        <div class="head"><div><h3>최근 거래 내역</h3><div class="sub">학생별 민원 확인용입니다.</div></div></div>
-        ${studentRecentLedgerHtml(id,25)}
+      <div class="section corporationAssetDashboardPanel">
+        <div class="head"><div><h2>보유 법인지분</h2><div class="sub">내 법인 주식은 재산으로 계산됩니다.</div></div></div>
+        ${studentCorporationAssetTableHtml(id)}
       </div>
-      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
-        <div class="head"><div><h3>일자별 소득</h3><div class="sub">날짜별 입금 합계입니다.</div></div></div>
-        ${studentDailyIncomeHtml(id)}
-      </div>
+    </div>
+
+    <div class="section dashboardSummaryBottom">
+      <div class="head"><div><h2>자산 요약</h2><div class="sub">자산 카드 요약은 대시보드 하단에서만 확인합니다.</div></div><div class="assetRank">${rankOfStudent(id)}위</div></div>
+      ${studentSummaryCardsHtml(id)}
     </div>
   </div>`;
 }
