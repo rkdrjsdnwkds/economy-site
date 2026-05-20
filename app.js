@@ -684,6 +684,11 @@ function ticketData(k){
   return state;
 }
 function ticketSold(k){const t=ticketData(k); return clampNum(n(t.sold),0,Math.max(1,n(t.supply)))}
+function ticketStock(k){return n(ticketData(k).stock)}
+function ticketStockHtml(k){
+  const stock=ticketStock(k);
+  return `<span class="ticketStockBadge ${stock<=0?"zero":""}">재고 ${stock}장</span>`;
+}
 function ticketBuy(k){
   if(isTopDisplayTicket(k)) return 5;
   return ticketPriceInfo(k).close;
@@ -2088,6 +2093,32 @@ function studentLedgerEntries(id,limit=20){
     .sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
   return limit ? rows.slice(0,limit) : rows;
 }
+function allStudentLedgerHtml(limit=80){
+  const rows=arr(data.ledger)
+    .map(e=>{
+      const studentLines=arr(e.lines).filter(l=>l.account!==CENTRAL && student(l.account));
+      return {...e,studentLines};
+    })
+    .filter(e=>e.studentLines.length)
+    .sort((a,b)=>(b.ts||"").localeCompare(a.ts||""))
+    .slice(0,limit);
+  if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>시간</th><th>내용</th><th>학생</th><th class="num">금액</th></tr></thead><tbody>${rows.map(e=>{
+    const when=e.ts ? new Date(e.ts).toLocaleString("ko-KR") : (e.day||"-");
+    const names=e.studentLines.map(l=>studentName(l.account)).join(" / ");
+    const amount=e.studentLines.reduce((sum,l)=>sum+n(l.delta),0);
+    return `<tr><td>${when}</td><td>${e.desc||e.type||"-"}</td><td>${names}</td><td class="num ${amount>=0?"ledgerPlus":"ledgerMinus"}">${amount>=0?"+":""}${won(amount)}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function studentRecentLedgerHtml(id,limit=20,showTax=false){
+  const rows=studentLedgerEntries(id,limit);
+  if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>시간</th><th>내용</th><th class="num">금액</th>${showTax?`<th>세금</th>`:""}</tr></thead><tbody>${rows.map(e=>{
+    const when=e.ts ? new Date(e.ts).toLocaleString("ko-KR") : (e.day||"-");
+    const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
+    return `<tr><td>${when}</td><td>${e.desc||e.type||"-"}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td>${showTax?`<td>${studentTaxPaidControl(e,id)}</td>`:""}</tr>`;
+  }).join("")}</tbody></table></div>`;
+}
 function studentTaxDueForLedger(e,id){
   if(!e || !id) return 0;
   if(!isStudentTradeLedger(e)) return 0;
@@ -3427,6 +3458,14 @@ function renderSettingsBasicFallback(msg=""){
 }
 
 function renderSettings(){
+  try {
+    renderSettingsUnsafe();
+  } catch(e) {
+    console.error("settings render error", e);
+    renderSettingsBasicFallback(e?.message || String(e));
+  }
+}
+function renderSettingsUnsafe(){
   const s = data.settings || {};
   const firstKey = firstTicketKey();
   const el = document.getElementById("settings");
@@ -4383,13 +4422,21 @@ function peerDetailHtml(id){
 }
 window.showPeerInfo = function(id){
   const s=student(id); if(!s) return;
-  const c=creditScoreInfo(id);
-  const rank=rankOfStudent(id);
-  const rankText=rank==="-" ? "개인 순위 제외" : `개인 재산 ${rank}위`;
-  document.getElementById("detailTitle").textContent=`${s.name} 구경하기`;
-  document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · ${rankText} · 신용 ${c.grade} ${c.score}점`;
-  document.getElementById("detailBody").innerHTML=peerDetailHtml(id);
-  document.getElementById("detailModal").classList.remove("hidden");
+  try{
+    const c=creditScoreInfo(id);
+    const rank=rankOfStudent(id);
+    const rankText=rank==="-" ? "개인 순위 제외" : `개인 재산 ${rank}위`;
+    document.getElementById("detailTitle").textContent=`${s.name} 구경하기`;
+    document.getElementById("detailSub").textContent=`${studentJobName(s)||"직업 없음"} · ${rankText} · 신용 ${c.grade} ${c.score}점`;
+    document.getElementById("detailBody").innerHTML=peerDetailHtml(id);
+    document.getElementById("detailModal").classList.remove("hidden");
+  }catch(e){
+    console.error("peer detail render error", e);
+    document.getElementById("detailTitle").textContent=`${s.name} 구경하기`;
+    document.getElementById("detailSub").textContent="학생 상세 정보를 여는 중 일부 오류가 있었습니다.";
+    document.getElementById("detailBody").innerHTML=`<div class="section"><h3>${s.name}</h3><p class="small">${e?.message || String(e)}</p></div>`;
+    document.getElementById("detailModal").classList.remove("hidden");
+  }
 }
 window.studentLogin = function(){
   const id=document.getElementById("loginStudent").value, pin=document.getElementById("loginPin").value;
