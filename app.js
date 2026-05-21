@@ -66,6 +66,10 @@ const db = getDatabase(app);
 const rootRef = ref(db, "classEconomy/main");
 
 const CENTRAL = "CENTRAL";
+const TICKET_SCARCITY_WEIGHT = 0.5;
+const MIN_TICKET_PRICE_MULTIPLIER = 0.7;
+const MAX_TICKET_PRICE_MULTIPLIER = 2.0;
+const SAVING_PAYMENT_INTERVAL_DAYS = 2;
 const SNACK_PRODUCT_DEFAULTS = {
   dust:{name:"먼지",kind:"fixed",priceType:"fixed",fixedPrice:10,price:10,wholesaleRate:0.9,secret:false,note:"고정가 / 10열매"},
   peopleSnack:{name:"국민간식",kind:"economyIndex",priceType:"economyIndex",basePrice:20,baseEconomyIndex:100,sensitivity:0.5,minPrice:15,maxPrice:30,wholesaleRate:0.7,price:20,secret:false,note:"경제지수 연동 / 기본 소비재"},
@@ -272,7 +276,14 @@ function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
 function money(v){return Math.round(n(v))}
 function fmt(v){return money(v).toLocaleString("ko-KR")}
 function won(v){return fmt(v)+"열매"}
-function today(){return new Date().toISOString().slice(0,10)}
+function localDateString(d=new Date()){
+  const x=new Date(d);
+  const y=x.getFullYear();
+  const m=String(x.getMonth()+1).padStart(2,"0");
+  const day=String(x.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function today(){return localDateString(new Date())}
 function now(){return new Date().toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}
 function obj(o){return o || {}}
 function arr(o){return Object.values(o || {})}
@@ -613,15 +624,24 @@ function previousTicketClose(ticketId,day=today()){
   const last=rows[rows.length-1];
   return n(last?.ticketPrices?.[ticketId]?.close || last?.ticketPrices?.[ticketId]?.buy || 0);
 }
-function calculateTicketPrice(ticketId,baseStats=classEconomyStatsBase(today())){
-  if(isTopDisplayTicket(ticketId)) return {base:5,close:5,open:5,high:5,low:5,change:0,changeRate:0,buyOrders:0,sellOrders:0,incomeCorrection:1,demandCorrection:1};
+function ticketScarcityMultiplier(ticketId,stockOverride=null){
+  if(isTopDisplayTicket(ticketId)) return 1;
+  const t=ticketData(ticketId);
+  const initialStock=Math.max(1,n(t.supply));
+  const currentStock=clampNum(stockOverride===null ? n(t.stock) : n(stockOverride),0,initialStock);
+  const stockRatio=currentStock/initialStock;
+  return clampNum(1+(1-stockRatio)*TICKET_SCARCITY_WEIGHT,MIN_TICKET_PRICE_MULTIPLIER,MAX_TICKET_PRICE_MULTIPLIER);
+}
+function calculateTicketPrice(ticketId,baseStats=classEconomyStatsBase(today()),stockOverride=null){
+  if(isTopDisplayTicket(ticketId)) return {base:5,close:5,open:5,high:5,low:5,change:0,changeRate:0,buyOrders:0,sellOrders:0,incomeCorrection:1,demandCorrection:1,scarcityMultiplier:1};
   const day=baseStats.date || today();
   const base=Math.max(1,ticketBaseFromAverage(ticketId,baseStats.averageHoldingPerStudent));
   const averageIssued=recentIssuedIncomeAverage(day);
   const incomeCorrection=clampNum(averageIssued>0 ? n(baseStats.issuedIncome)/averageIssued : 1,0.9,1.1);
   const demand=ticketDemandCounts(ticketId,day);
   const demandCorrection=clampNum(1+((demand.buyOrders-demand.sellOrders)/activeStudentCount())*0.3,0.85,1.2);
-  const temporary=base*incomeCorrection*demandCorrection;
+  const scarcityMultiplier=ticketScarcityMultiplier(ticketId,stockOverride);
+  const temporary=base*incomeCorrection*demandCorrection*scarcityMultiplier;
   const previous=previousTicketClose(ticketId,day) || base;
   const close=money(clampNum(temporary,previous*0.8,previous*1.25));
   const open=money(previous);
@@ -638,7 +658,8 @@ function calculateTicketPrice(ticketId,baseStats=classEconomyStatsBase(today()))
     buyOrders:demand.buyOrders,
     sellOrders:demand.sellOrders,
     incomeCorrection,
-    demandCorrection
+    demandCorrection,
+    scarcityMultiplier
   };
 }
 function currentEconomyStats(day=today()){
@@ -648,6 +669,20 @@ function currentEconomyStats(day=today()){
   return {...base,ticketPrices};
 }
 function ticketPriceInfo(k){return calculateTicketPrice(k,classEconomyStatsBase(today()))}
+function ticketBuyPriceInfo(k){
+  if(isTopDisplayTicket(k)) return ticketPriceInfo(k);
+  const t=ticketData(k);
+  const sellInfo=ticketPriceInfo(k);
+  const buyInfo=calculateTicketPrice(k,classEconomyStatsBase(today()),n(t.stock)-1);
+  if(n(t.stock)>0 && buyInfo.close<=sellInfo.close){
+    buyInfo.close=money(sellInfo.close+1);
+    buyInfo.high=Math.max(buyInfo.open,buyInfo.close);
+    buyInfo.low=Math.min(buyInfo.open,buyInfo.close);
+    buyInfo.change=money(buyInfo.close-buyInfo.open);
+    buyInfo.changeRate=buyInfo.open>0 ? (buyInfo.change/buyInfo.open)*100 : 0;
+  }
+  return buyInfo;
+}
 function basePrice(k){return isTopDisplayTicket(k)?5:ticketPriceInfo(k).base}
 function ticketUnit(k){return 0}
 function ticketStoredDate(raw){
@@ -691,7 +726,7 @@ function ticketStockHtml(k){
 }
 function ticketBuy(k){
   if(isTopDisplayTicket(k)) return 5;
-  return ticketPriceInfo(k).close;
+  return ticketBuyPriceInfo(k).close;
 }
 function ticketSell(k){
   if(isTopDisplayTicket(k)) return 5;
@@ -1950,12 +1985,20 @@ function activeBondRowsHtml(id){
 }
 
 function savingsRate(){return n(data.settings.depositRate)}
-function dateOnly(d=new Date()){return new Date(d).toISOString().slice(0,10)}
-function addDays(iso,days){const d=new Date((iso||today())+"T00:00:00"); d.setDate(d.getDate()+Math.floor(n(days))); return d.toISOString().slice(0,10)}
+function dateOnly(d=new Date()){return localDateString(d)}
+function dateParts(iso){
+  const [y,m,d]=String(iso||today()).slice(0,10).split("-").map(x=>Number(x));
+  return {y:y||1970,m:m||1,d:d||1};
+}
+function dateUtcMs(iso){const p=dateParts(iso); return Date.UTC(p.y,p.m-1,p.d)}
+function addDays(iso,days){
+  const p=dateParts(iso);
+  const d=new Date(p.y,p.m-1,p.d);
+  d.setDate(d.getDate()+Math.floor(n(days)));
+  return localDateString(d);
+}
 function daysBetween(a,b=today()){
-  const A=new Date((a||today())+"T00:00:00");
-  const B=new Date((b||today())+"T00:00:00");
-  return Math.floor((B-A)/(24*60*60*1000));
+  return Math.floor((dateUtcMs(b)-dateUtcMs(a))/(24*60*60*1000));
 }
 function activeSavings(id){return arr(data.savings).filter(s=>s.owner===id && s.status==="active").sort((a,b)=>(a.mature||"").localeCompare(b.mature||""))}
 function savingInstallment(s){return money(s.installment ?? s.amount ?? 0)}
@@ -1969,7 +2012,17 @@ function savingProjection(s,asOf=today()){
 }
 function savingsValueOf(id){return activeSavings(id).reduce((sum,s)=>sum+savingProjection(s).balance,0)}
 function savingsSumOf(id){return savingsValueOf(id)}
-function canPaySaving(s){return daysBetween(s.nextPayDate||s.start||today(),today())>=0}
+function savingLastPaidDate(s){
+  if(s.lastPaidDate) return String(s.lastPaidDate).slice(0,10);
+  const rows=(derived.ledger || []).filter(e=>obj(e.meta).savingId===s.id && typeText(e).includes("적금납입")).sort((a,b)=>(b.day||"").localeCompare(a.day||""));
+  return rows[0]?.day || "";
+}
+function savingNextPayDate(s){
+  const lastPaid=savingLastPaidDate(s);
+  if(lastPaid) return addDays(lastPaid,SAVING_PAYMENT_INTERVAL_DAYS);
+  return String(s.nextPayDate || s.start || today()).slice(0,10);
+}
+function canPaySaving(s){return daysBetween(savingNextPayDate(s),today())>=0}
 function savingsRowsHtml(id){
   const rows=activeSavings(id);
   if(!rows.length) return `<p class="small">가입 중인 적금이 없습니다.</p>`;
@@ -1977,7 +2030,7 @@ function savingsRowsHtml(id){
     const due=new Date((s.mature||"")+"T00:00:00")<=new Date();
     const projected=savingProjection(s);
     const installment=savingInstallment(s);
-    const next=s.nextPayDate||s.start||today();
+    const next=savingNextPayDate(s);
     return `<tr><td>${s.start||"-"}</td><td>${s.mature||"-"}</td><td class="num">${won(installment)}</td><td class="num">${won(s.totalPaid||0)}</td><td class="num"><b>${won(projected.balance)}</b><br><span class="small">매주 복리 ${n(s.rate)||Math.round(savingsRate()*100)}%</span></td><td>${next}${canPaySaving(s)?`<br><span class="pill green">납입 가능</span>`:""}</td><td><div class="toolbar"><button class="blue" onclick="paySavingInstallment('${s.id}')" ${canPaySaving(s)?"":"disabled"}>납입</button>${due?`<button class="green" onclick="matureSaving('${s.id}')">만기 수령</button>`:""}<button class="danger" onclick="cancelSaving('${s.id}')">중도해지</button></div></td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
@@ -2202,10 +2255,10 @@ function depositBankbookHtml(id){
 function savingBankbookHtml(id){
   const book=bankbookById("saving");
   const rows=activeSavings(id);
-  const next=rows[0]?.nextPayDate || rows[0]?.start || "-";
+  const next=rows[0] ? savingNextPayDate(rows[0]) : "-";
   const expected=rows.reduce((sum,s)=>sum+Math.max(0,savingProjection(s).balance-n(s.totalPaid||0)),0);
-  const left=`<h3>적금통장</h3><div class="bankbookMiniStats"><div><span>현재 적금 평가액</span><b>${won(savingsValueOf(id))}</b></div><div><span>납입 주기</span><b>2일마다</b></div><div><span>다음 납입일</span><b>${next}</b></div><div><span>예상 이자액</span><b>${won(expected)}</b></div></div>
-    <div class="bankbookForm"><div class="field"><label>2일마다 납입할 금액</label><input id="reqSavingAmount" type="number" value="100"></div><div class="field"><label>기간</label><select id="reqSavingDays"><option value="21">3주</option><option value="28">4주</option><option value="35">5주</option></select></div><button class="orange" onclick="requestSavingStart()">적금 개설 신청</button></div>`;
+  const left=`<h3>적금통장</h3><div class="bankbookMiniStats"><div><span>현재 적금 평가액</span><b>${won(savingsValueOf(id))}</b></div><div><span>납입 주기</span><b>${SAVING_PAYMENT_INTERVAL_DAYS}일마다</b></div><div><span>다음 납입일</span><b>${next}</b></div><div><span>예상 이자액</span><b>${won(expected)}</b></div></div>
+    <div class="bankbookForm"><div class="field"><label>${SAVING_PAYMENT_INTERVAL_DAYS}일마다 납입할 금액</label><input id="reqSavingAmount" type="number" value="100"></div><div class="field"><label>기간</label><select id="reqSavingDays"><option value="21">3주</option><option value="28">4주</option><option value="35">5주</option></select></div><button class="orange" onclick="requestSavingStart()">적금 개설 신청</button></div>`;
   const right=`<h3>납입 기록</h3>${savingsRowsHtml(id)}`;
   return openBankbookShellHtml(book,left,right);
 }
@@ -2744,6 +2797,17 @@ function activeWarningsForStudent(id,source=""){
 function warningCountForStudent(id,source=""){
   return activeWarningsForStudent(id,source).length;
 }
+function legacyWarningCount(value){
+  if(Array.isArray(value)) return value.length;
+  if(value && typeof value==="object") return Object.values(value).filter(Boolean).length;
+  return n(value);
+}
+function policeWarningsForCredit(id){
+  const rows=activeWarningsForStudent(id,"police");
+  const s=obj(student(id));
+  const legacyCount=legacyWarningCount(s.policeWarning)+legacyWarningCount(s.policeWarnings)+legacyWarningCount(obj(data.policeWarning)[id])+legacyWarningCount(obj(data.policeWarnings)[id]);
+  return {rows,legacyCount,total:rows.length+legacyCount};
+}
 function dutyStage(id){return Math.max(0,Math.min(3,Math.floor(n(obj(data.dutyNeglect)[id]))))}
 function dutyPenaltyLabel(id){
   const s=dutyStage(id);
@@ -2769,11 +2833,12 @@ function taxAuditPenaltyCount(id){
 function creditScoreInfo(id){
   const asset=totalAssetsOf(id);
   const income=recentIncomeOf(id,7);
-  const warningsRows=activeWarningsForStudent(id);
+  const warningCredit=policeWarningsForCredit(id);
+  const warningsRows=warningCredit.rows;
   const now=Date.now();
   const daysAgo=(iso)=>{ const t=new Date(iso||0).getTime(); return Number.isNaN(t) ? 9999 : (now-t)/(24*60*60*1000); };
   const recentWarnings=warningsRows.filter(w=>daysAgo(w.ts)<=14).length;
-  const oldWarnings=Math.max(0,warningsRows.length-recentWarnings);
+  const oldWarnings=Math.max(0,warningsRows.length-recentWarnings)+warningCredit.legacyCount;
   const stage=dutyStage(id);
   const audits=taxAuditPenaltyCount(id);
   const debt=activeLoanBalance(id);
@@ -2797,8 +2862,8 @@ function creditScoreInfo(id){
   let score=700 + assetBonus + incomeBonus + recoveryBonus - warningPenalty - dutyPenalty - auditPenalty - debtPenalty - finePenalty;
   score=Math.max(300,Math.min(1000,Math.round(score)));
   const grade=score>=900?"S":score>=800?"A":score>=700?"B":score>=600?"C":score>=500?"D":"E";
-  const reason=`자산 +${assetBonus}, 최근소득 +${incomeBonus}, 성실회복 +${recoveryBonus}, 최근경고 -${recentWarnings*25}, 오래된경고 -${oldWarnings*8}, 직무유기 -${dutyPenalty}, 세금적발 -${auditPenalty}, 대출부담 -${debtPenalty}, 미납벌금 -${finePenalty}`;
-  return {score,grade,reason,asset,income,warnings:warningsRows.length,recentWarnings,oldWarnings,stage,audits,debt,overdueFines,unpaidFineTotal,recoveryBonus};
+  const reason=`자산 +${assetBonus}, 최근소득 +${incomeBonus}, 성실회복 +${recoveryBonus}, 최근 경찰경고 -${recentWarnings*25}, 오래된 경찰경고 -${oldWarnings*8}, 직무유기 -${dutyPenalty}, 세금적발 -${auditPenalty}, 대출부담 -${debtPenalty}, 미납벌금 -${finePenalty}`;
+  return {score,grade,reason,asset,income,warnings:warningCredit.total,recentWarnings,oldWarnings,stage,audits,debt,overdueFines,unpaidFineTotal,recoveryBonus};
 }
 function creditScorePill(id){
   const c=creditScoreInfo(id);
@@ -2807,7 +2872,7 @@ function creditScorePill(id){
 }
 function creditSummaryCard(id){
   const c=creditScoreInfo(id);
-  return `<div class="creditScoreCard"><div><span class="small">신용도</span><b>${c.grade}</b><em>${c.score}점</em></div><p class="small">${c.reason}</p></div>`;
+  return `<div class="creditScoreCard"><div><span class="small">신용도</span><b>${c.grade}</b><em>${c.score}점</em></div><p class="small">${c.reason}</p><p class="small"><b>경찰 경고</b>는 신용도에 반영됩니다. <b>심판 경고</b>는 경기/활동 중 주의 기록이며 신용도에는 영향이 없습니다.</p></div>`;
 }
 function roleWarningRowsForStudent(id){
   const rows=activeWarningsForStudent(id).slice(0,8);
@@ -2885,7 +2950,7 @@ function roleAdminPanelHtml(){
 function creditTableHtml(){
   const rows=students().map(s=>({s,c:creditScoreInfo(s.id)})).sort((a,b)=>b.c.score-a.c.score);
   if(!rows.length) return `<p class="small">학생 없음</p>`;
-  return `<div class="scroll"><table><thead><tr><th>학생</th><th>직업</th><th>신용</th><th>경고</th><th>직무유기</th></tr></thead><tbody>${rows.map(({s,c})=>`<tr><td>${s.name}</td><td>${studentJobName(s)||"-"}</td><td><span class="pill ${c.score>=800?'green':c.score>=700?'blue':c.score>=600?'orange':'red'}">${c.grade} · ${c.score}</span></td><td>${warningCountForStudent(s.id)}회</td><td>${dutyStage(s.id)}단계</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>학생</th><th>직업</th><th>신용</th><th>경찰 경고</th><th>심판 경고</th><th>직무유기</th></tr></thead><tbody>${rows.map(({s,c})=>`<tr><td>${s.name}</td><td>${studentJobName(s)||"-"}</td><td><span class="pill ${c.score>=800?'green':c.score>=700?'blue':c.score>=600?'orange':'red'}">${c.grade} · ${c.score}</span></td><td>${warningCountForStudent(s.id,"police")}회<br><span class="small">신용도 반영</span></td><td>${warningCountForStudent(s.id,"referee")}회<br><span class="small">기록만 보관</span></td><td>${dutyStage(s.id)}단계</td></tr>`).join("")}</tbody></table></div>`;
 }
 function roleWarningAppealTableHtml(){
   const rows=roleWarnings().filter(w=>w.appealable && w.status==="appealed");
@@ -2959,6 +3024,7 @@ function policeWorkHtml(id){
       <div class="card"><h3>학생 경고</h3><div class="field"><label>대상</label><select id="policeWarnTarget">${studentOptions()}</select></div><div class="field"><label>사유 필수</label><textarea id="policeWarnReason" placeholder="경고 사유를 반드시 입력"></textarea></div><button class="orange" onclick="issuePoliceWarning()">경고 부여</button></div>
     </div>
     <h3>내가 부여한 경찰 경고</h3>${roleWarningTableHtml("police",id)}
+    <h3>경찰 경고 이의신청 현황</h3>${roleWarningAppealStatusTableHtml("police",id)}
   </div>`;
 }
 function refereeWorkHtml(id){
@@ -2968,6 +3034,7 @@ function refereeWorkHtml(id){
       <div class="card"><h3>학생 경고</h3><div class="field"><label>대상</label><select id="refereeWarnTarget">${studentOptions()}</select></div><div class="field"><label>사유 선택</label><textarea id="refereeWarnReason" placeholder="선택 입력"></textarea></div><button class="purple" onclick="issueRefereeWarning()">경고 부여</button></div>
       <div class="card"><h3>내가 처리한 경고</h3>${roleWarningTableHtml("referee",id)}</div>
     </div>
+    <h3>심판 경고 이의신청 현황</h3>${roleWarningAppealStatusTableHtml("referee",id)}
   </div>`;
 }
 function taxOfficeWorkHtml(id){
@@ -3006,6 +3073,17 @@ function roleWarningTableHtml(source,actorId=""){
   const rows=roleWarnings().filter(w=>w.source===source && (!actorId || w.actorId===actorId)).slice(0,10);
   if(!rows.length) return `<p class="small">기록 없음</p>`;
   return `<div class="scroll"><table><thead><tr><th>날짜</th><th>대상</th><th>사유</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows.map(w=>`<tr><td>${(w.ts||"").slice(0,10)}</td><td>${studentName(w.targetId)}</td><td>${w.reason||"사유 없음"}</td><td>${w.status==="cancelled"?"취소":w.status==="appealed"?"이의신청":w.status==="upheld"?"유지":"진행"}</td><td>${w.status!=="cancelled" && actorId && w.actorId===actorId?`<button class="danger" onclick="cancelMyRoleWarning('${w.id}')">취소</button>`:"-"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function roleWarningAppealStatusText(status){
+  if(status==="appealed") return "이의신청 접수";
+  if(status==="upheld") return "경고 유지";
+  if(status==="cancelled") return "경고 취소";
+  return "이의신청 없음";
+}
+function roleWarningAppealStatusTableHtml(source,actorId=""){
+  const rows=roleWarnings().filter(w=>w.source===source && (!actorId || w.actorId===actorId) && (w.appealable || w.appealReason || w.appealedAt || ["appealed","upheld","cancelled"].includes(w.status))).slice(0,20);
+  if(!rows.length) return `<p class="small">이의신청 현황이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>접수일</th><th>대상</th><th>경고 사유</th><th>이의 내용</th><th>상태</th><th>처리일</th></tr></thead><tbody>${rows.map(w=>`<tr><td>${(w.appealedAt||w.ts||"").slice(0,10)||"-"}</td><td>${studentName(w.targetId)}</td><td>${w.reason||"사유 없음"}</td><td>${w.appealReason||"-"}</td><td><span class="pill ${w.status==="cancelled"?"red":w.status==="upheld"?"orange":w.status==="appealed"?"blue":"green"}">${roleWarningAppealStatusText(w.status)}</span></td><td>${(w.reviewedAt||w.cancelledAt||"").slice(0,10)||"-"}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function taxAuditCandidates(){
   return (derived.ledger || []).filter(e=>isStudentTradeLedger(e) && taxableLedgerLines(e).length>0).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
@@ -3246,6 +3324,7 @@ function renderTickets(){
 function ticketCard(k){
   const t=ticketData(k), m=ticketMeta[k]||{name:k,color:"#64748b",formula:""};
   const info=ticketPriceInfo(k);
+  const buyInfo=ticketBuyPriceInfo(k);
   const soldRatio=Math.round((n(t.sold)/Math.max(1,n(t.supply)))*100);
   return `<div class="card" style="border-left:9px solid ${m.color}">
     <h3>${m.name}</h3><div class="sub">${m.formula}</div>
@@ -3254,10 +3333,10 @@ function ticketCard(k){
     <div class="ticketInventoryText">총 ${n(t.supply)}장 · 판매 ${n(t.sold)}장 · 재고 ${n(t.stock)}장</div>
     <div class="grid g3" style="margin-top:10px">
       <div class="price"><div class="label">기본</div><div class="value">${won(info.base)}</div></div>
-      <div class="price buy"><div class="label">현재가</div><div class="value">${won(info.close)}</div></div>
-      <div class="price sell"><div class="label">등락률</div><div class="value">${pct(info.changeRate)}</div></div>
+      <div class="price buy"><div class="label">구매가</div><div class="value">${won(buyInfo.close)}</div></div>
+      <div class="price sell"><div class="label">판매가</div><div class="value">${won(info.close)}</div></div>
     </div>
-    <div class="ticketFormulaMini">전날 대비 ${signedWon(info.change)} · 소득보정 ${Math.round(info.incomeCorrection*100)}% · 수요보정 ${Math.round(info.demandCorrection*100)}%</div>
+    <div class="ticketFormulaMini">전날 대비 ${signedWon(info.change)} · 구매가는 구매 후 재고 기준 · 판매가 재고부족 ${Math.round((info.scarcityMultiplier||1)*100)}% · 구매가 재고부족 ${Math.round((buyInfo.scarcityMultiplier||1)*100)}%</div>
     <div class="field" style="margin-top:10px"><label>총수량</label><input type="number" value="${n(t.supply)}" onchange="updateTicket('${k}','supply',this.value)"></div>
     <div class="field"><label>판매된 수 보정</label><input type="number" value="${n(t.sold)}" onchange="updateTicket('${k}','sold',this.value)"></div>
     <div class="small">현재재고는 총수량 - 판매된 수로 자동 계산됩니다. 구매하면 판매 수가 늘고, 판매/사용하면 재고로 돌아옵니다.</div>
@@ -4319,7 +4398,7 @@ window.earlyCancelBond = async function(id){
 
 window.paySavingInstallment = async function(id){
   const s=obj(data.savings)[id]; if(!s||s.status!=="active") return;
-  if(!canPaySaving(s)) return toast(`다음 납입일은 ${s.nextPayDate}입니다.`);
+  if(!canPaySaving(s)) return toast(`다음 납입일은 ${savingNextPayDate(s)}입니다.`);
   const installment=savingInstallment(s);
   if(!requireCash(s.owner,installment)) return;
   const projected=savingProjection(s);
@@ -4328,7 +4407,8 @@ window.paySavingInstallment = async function(id){
   await dbUpdate("savings/"+id,{
     balance:newBalance,
     totalPaid:newTotal,
-    nextPayDate:addDays(today(),2),
+    nextPayDate:addDays(today(),SAVING_PAYMENT_INTERVAL_DAYS),
+    lastPaidDate:today(),
     lastInterestAt:projected.lastInterestAt
   });
   await addLedger("적금납입",`${studentName(s.owner)} 적금 납입`,[{account:s.owner,delta:-installment},{account:CENTRAL,delta:installment}],{savingId:id,installment,balance:newBalance});
@@ -4522,13 +4602,13 @@ async function doSavingsStart(studentId,amount,days=21,rate=Math.round(savingsRa
     balance:0,
     rate,
     days,
-    start:start.toISOString().slice(0,10),
-    mature:mature.toISOString().slice(0,10),
-    nextPayDate:start.toISOString().slice(0,10),
-    lastInterestAt:start.toISOString().slice(0,10),
+    start:localDateString(start),
+    mature:localDateString(mature),
+    nextPayDate:localDateString(start),
+    lastInterestAt:localDateString(start),
     status:"active"
   });
-  await addLedger("적금개설",`${studentName(studentId)} 적금 개설: 2일마다 ${won(installment)} 납입`,[],{savingId:id,installment,days,rate});
+  await addLedger("적금개설",`${studentName(studentId)} 적금 개설: ${SAVING_PAYMENT_INTERVAL_DAYS}일마다 ${won(installment)} 납입`,[],{savingId:id,installment,days,rate});
   return true;
 }
 async function doLoanApprove(r,rate,bankerId=""){
@@ -4740,6 +4820,7 @@ window.showCreditHelp = function(){
   if(title) title.textContent="신용도 도움말";
   if(sub) sub.textContent="경제교실에서 돈·약속·역할을 얼마나 믿고 맡길 수 있는지 보여주는 점수";
   if(body) body.innerHTML=`<div class="economyHelpBox creditHelpBox">
+    <div class="notice"><b>경고와 신용도</b><br>경찰 경고는 신용도에 영향이 있습니다. 심판 경고는 경기/활동 중 주의 기록으로 남지만 신용도 계산에는 사용하지 않습니다.</div>
     <p><b>신용도</b>는 벌점이 아니라, 경제교실에서 돈·약속·역할을 믿고 맡길 수 있는 정도입니다.</p>
     <div class="scroll"><table><thead><tr><th>등급</th><th>점수</th><th>의미</th></tr></thead><tbody>
       <tr><td><b>S</b></td><td>900~1000</td><td>매우 신뢰 가능</td></tr>
