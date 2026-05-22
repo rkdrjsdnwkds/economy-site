@@ -46,17 +46,13 @@ function notices(){
   return arr(data.classroomNotices).filter(n => n && n.id && n.deleted !== true)
     .sort((a,b)=>String(a.dueDate||"9999-12-31").localeCompare(String(b.dueDate||"9999-12-31")) || String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
 }
-function meta(t){
-  return {notice:"공지", homework:"숙제", material:"준비물", event:"행사"}[t] || "알림";
-}
+function meta(t){ return {notice:"공지", homework:"숙제", material:"준비물", event:"행사"}[t] || "알림"; }
 function statusKey(noticeId, studentId){ return `${noticeId}_${studentId}`; }
 function statusOf(noticeId, studentId){
   const map = obj(data.classroomNoticeStatus);
   return map[statusKey(noticeId, studentId)] || arr(map).find(s => s.noticeId === noticeId && s.studentId === studentId) || {};
 }
-function targetIds(n){
-  return n.targetType === "selected" ? arr(n.targetStudentIds).filter(Boolean) : students().map(s=>s.id);
-}
+function targetIds(n){ return n.targetType === "selected" ? arr(n.targetStudentIds).filter(Boolean) : students().map(s=>s.id); }
 function statusLabel(s){
   if(s.teacherConfirmed || s.status === "confirmed") return "선생님 확인 완료";
   if(s.status === "incomplete") return "미완료 처리";
@@ -163,26 +159,10 @@ window.createClassroomNotice = async function(){
     const targetStudentIds = targetType === "selected" ? Array.from(document.querySelectorAll(".noticeTargetStudent:checked")).map(el=>el.value) : [];
     if(targetType === "selected" && targetStudentIds.length === 0){ toast("대상 학생을 선택하세요."); return; }
     const id = uid("notice");
-    await dbSet(`classroomNotices/${id}`, {
-      id,
-      title,
-      content: $("noticeContent")?.value.trim() || "",
-      type: $("noticeType")?.value || "notice",
-      targetType,
-      targetStudentIds,
-      dueDate: $("noticeDueDate")?.value || "",
-      important: !!$("noticeImportant")?.checked,
-      createdBy: "teacher",
-      createdAt: now(),
-      updatedAt: now(),
-      deleted: false
-    });
+    await dbSet(`classroomNotices/${id}`, { id, title, content: $("noticeContent")?.value.trim() || "", type: $("noticeType")?.value || "notice", targetType, targetStudentIds, dueDate: $("noticeDueDate")?.value || "", important: !!$("noticeImportant")?.checked, createdBy: "teacher", createdAt: now(), updatedAt: now(), deleted: false });
     clearClassroomNoticeForm();
     toast("알림장이 등록됐습니다.");
-  }catch(e){
-    console.error(e);
-    toast(`저장 실패: ${e.message || e}`);
-  }
+  }catch(e){ console.error(e); toast(`저장 실패: ${e.message || e}`); }
 };
 
 window.clearClassroomNoticeForm = function(){
@@ -193,9 +173,7 @@ window.clearClassroomNoticeForm = function(){
   document.querySelectorAll(".noticeTargetStudent").forEach(el => el.checked = false);
   $("noticeStudentPicker")?.classList.add("hidden");
 };
-window.deleteClassroomNotice = async function(id){
-  if(confirm("이 알림을 삭제할까요?")) await dbUpdate(`classroomNotices/${id}`, {deleted:true, updatedAt:now()});
-};
+window.deleteClassroomNotice = async function(id){ if(confirm("이 알림을 삭제할까요?")) await dbUpdate(`classroomNotices/${id}`, {deleted:true, updatedAt:now()}); };
 window.confirmClassroomNoticeStatus = async function(noticeId, studentId, status="confirmed"){
   const key = statusKey(noticeId, studentId);
   const old = statusOf(noticeId, studentId);
