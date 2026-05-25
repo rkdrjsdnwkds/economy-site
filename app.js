@@ -3,6 +3,7 @@ import { getDatabase, ref, onValue, set, update, push, remove, runTransaction } 
 import { STATIC_AVATARS } from "./avatar-assets.js";
 import { CUSTOM_AVATARS } from "./custom-avatars.js";
 import { MINIROOM_TEMPLATES } from "./miniroom-assets.js";
+import { RESTORED_AVATAR_DATA_URIS } from "./restored-avatar-images.js";
 
 window.__ECONOMY_BOOT_STARTED__ = true;
 let firebaseReady = false;
@@ -85,6 +86,7 @@ const ticketMeta = {
 const defaultData = {
   previousIncome: 1000,
   students: {},
+  studentStatusMessages: {},
   ledger: {},
   inventories: {},
   tickets: {
@@ -115,6 +117,10 @@ const defaultData = {
   workClaims: {},
   taxOfficeWageRecords: {},
   roleWarnings: {},
+  classroomNotices: {},
+  classroomNoticeStatus: {},
+  teacherMessageRooms: {},
+  teacherMessages: {},
   dutyNeglect: {},
   marketListings: {},
   marketBoosts: {},
@@ -127,6 +133,7 @@ const defaultData = {
   cosmeticPrices:{},
   avatarCreators:{},
   avatarCloset:{},
+  hiddenAvatars:{},
   roomCloset:{},
   roomTemplateCloset:{},
   avatarState:{},
@@ -209,6 +216,21 @@ let currentTab = "dashboard";
 let selectedStudent = localStorage.getItem("selectedStudent") || "";
 let studentTab = localStorage.getItem("studentTab") || cfg("ux.defaultStudentTab","assets");
 let selectedBankbook = "";
+let selectedNoticeStudentTab = localStorage.getItem("studentNoticeTab") || "today";
+let selectedStudentNoticeDetail = localStorage.getItem("studentNoticeDetail") || "";
+let selectedTeacherNoticeTab = localStorage.getItem("teacherNoticeTab") || "create";
+let activeMobilePage = localStorage.getItem("activeMobilePage") || "";
+let activeMobileTeacherPage = localStorage.getItem("activeMobileTeacherPage") || "";
+let selectedTeacherMessageRoom = localStorage.getItem("teacherMessageRoom") || "";
+let selectedTeacherNoticeDetail = localStorage.getItem("teacherNoticeDetail") || "";
+let teacherMessageSearch = "";
+let noticeUncheckedOnly = false;
+let studentNoticeUnsubs = [];
+let teacherNoticeUnsubs = [];
+let activeMessageUnsub = null;
+let subscribedNoticeStudent = "";
+let noticeState = {all:[],student:[],statuses:[],studentStatuses:{},teacherStatuses:[],rooms:[],studentRoom:null,messages:[]};
+let lastStudentMessageSentAt = 0;
 let bankLedgerDateFilter = "";
 let bankLedgerPage = 1;
 const BANK_LEDGER_PAGE_SIZE = 8;
@@ -222,7 +244,13 @@ let renderTimer = 0;
 function isEditingElement(el){return el && ["INPUT","SELECT","TEXTAREA"].includes(el.tagName)}
 function scheduleRender(delay=80){
   clearTimeout(renderTimer);
-  renderTimer=setTimeout(()=>render(),delay);
+  renderTimer=setTimeout(()=>{
+    if(uiEditing && isEditingElement(document.activeElement)){
+      pendingRealtimeRender = true;
+      return;
+    }
+    render();
+  },delay);
 }
 document.addEventListener("focusin", e=>{ if(isEditingElement(e.target)) uiEditing=true; });
 document.addEventListener("focusout", e=>{
@@ -285,8 +313,34 @@ function localDateString(d=new Date()){
 }
 function today(){return localDateString(new Date())}
 function now(){return new Date().toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}
+function seoulDate(d=new Date()){return new Date(new Date(d).getTime()+9*60*60*1000)}
+function seoulIsoString(d=new Date()){
+  const x=seoulDate(d);
+  const y=x.getUTCFullYear();
+  const m=String(x.getUTCMonth()+1).padStart(2,"0");
+  const day=String(x.getUTCDate()).padStart(2,"0");
+  const hh=String(x.getUTCHours()).padStart(2,"0");
+  const mm=String(x.getUTCMinutes()).padStart(2,"0");
+  const ss=String(x.getUTCSeconds()).padStart(2,"0");
+  return `${y}-${m}-${day}T${hh}:${mm}:${ss}+09:00`;
+}
+function seoulDateTimeText(ts){
+  if(!ts) return "-";
+  const d=new Date(ts);
+  if(Number.isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString("ko-KR",{timeZone:"Asia/Seoul",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+function seoulDateShortText(ts){
+  if(!ts) return "-";
+  const d=new Date(ts);
+  if(Number.isNaN(d.getTime())) return String(ts).slice(0,10) || "-";
+  return d.toLocaleDateString("ko-KR",{timeZone:"Asia/Seoul",month:"2-digit",day:"2-digit"}).replace(/\.\s?/g,".").replace(/\.$/,"");
+}
 function obj(o){return o || {}}
 function arr(o){return Object.values(o || {})}
+function escapeHtml(text=""){
+  return String(text).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+}
 function sid(){return "s_" + Math.random().toString(36).slice(2,9)}
 function txid(){return "tx_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,6)}
 function toast(msg){const old=document.querySelector(".toast"); if(old) old.remove(); const el=document.createElement("div"); el.className="toast"; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),cfgNum("ux.toastMs",2600))}
@@ -353,6 +407,21 @@ async function repairSnackProductDefaultsIfNeeded(){
 function student(id){return obj(data.students)[id]}
 function studentName(id){return id===CENTRAL ? "중앙은행" : (student(id)?.name || "알 수 없음")}
 function students(){return derived.students?.length ? derived.students : arr(data.students)}
+const studentThemeCatalog = {
+  green:{id:"green",name:"초록",accent:"#4c963b",accent2:"#75b957",soft:"#eef8e9",ink:"#285c2b"},
+  blue:{id:"blue",name:"파랑",accent:"#2563eb",accent2:"#60a5fa",soft:"#eff6ff",ink:"#1d4ed8"},
+  black:{id:"black",name:"검정",accent:"#111827",accent2:"#4b5563",soft:"#f3f4f6",ink:"#111827"},
+  yellow:{id:"yellow",name:"노랑",accent:"#d97706",accent2:"#facc15",soft:"#fffbeb",ink:"#92400e"},
+  purple:{id:"purple",name:"보라",accent:"#7c3aed",accent2:"#a78bfa",soft:"#f5f3ff",ink:"#6d28d9"}
+};
+function studentThemeId(id=selectedStudent){
+  const theme=String(student(id)?.theme || localStorage.getItem("studentTheme:"+id) || "green");
+  return studentThemeCatalog[theme] ? theme : "green";
+}
+function studentThemeOptionsHtml(id){
+  const current=studentThemeId(id);
+  return Object.values(studentThemeCatalog).map(t=>`<button class="studentThemeSwatch ${current===t.id?'active':''}" style="--swatch:${t.accent};--swatch2:${t.accent2};--swatch-soft:${t.soft}" onclick="setStudentTheme('${id}','${t.id}')"><i></i><span>${t.name}</span></button>`).join("");
+}
 function balanceOf(id){
   return money(obj(derived.balances)[id])
 }
@@ -853,9 +922,12 @@ function databaseAvatarItems(){
   return Object.values(entries).filter(it=>it && it.type==="avatar" && it.src)
     .reduce((acc,it)=>{acc[it.id]=it; return acc;},{});
 }
-function avatarItemCatalog(){
+function isAvatarHidden(id){
+  return obj(data.hiddenAvatars)[id]===true;
+}
+function avatarItemCatalog(includeHidden=false){
   const items={...STATIC_AVATARS,...CUSTOM_AVATARS,...databaseAvatarItems()};
-  return Object.values(items).filter(it=>it.visible!==false).sort(byCatalogOrder);
+  return Object.values(items).filter(it=>it.visible!==false && (includeHidden || !isAvatarHidden(it.id))).sort(byCatalogOrder);
 }
 function roomItemById(id){return obj(defaultData.roomItems)[id] || obj(data.roomItems)[id] || null}
 function roomItemCatalog(){
@@ -898,7 +970,7 @@ function roomFloorStyle(itemId){
 
 
 
-function avatarItemById(id){return STATIC_AVATARS[id] || CUSTOM_AVATARS[id] || databaseAvatarItems()[id] || null}
+function avatarItemById(id){return databaseAvatarItems()[id] || STATIC_AVATARS[id] || CUSTOM_AVATARS[id] || null}
 function isDatabaseAvatar(id){return !!databaseAvatarItems()[id]}
 function avatarCreatorId(item){
   if(!item) return "";
@@ -912,6 +984,26 @@ function avatarCreatorRoyalty(price,item,buyerId=""){
   if(!creator || creator===buyerId) return 0;
   return money(price*avatarCreatorRate());
 }
+const RESTORED_AVATAR_IMAGES = {
+  custom_surisuri: RESTORED_AVATAR_DATA_URIS.custom_surisuri,
+  custom_nyangnyangnyanyang: RESTORED_AVATAR_DATA_URIS.custom_nyangnyangnyanyang,
+  custom_twokkwi: RESTORED_AVATAR_DATA_URIS.custom_twokkwi,
+  custom_cheongchun: RESTORED_AVATAR_DATA_URIS.custom_cheongchun,
+  custom_question: RESTORED_AVATAR_DATA_URIS.custom_question,
+  custom_pworworo: RESTORED_AVATAR_DATA_URIS.custom_pworworo
+};
+const RESTORED_AVATAR_IMAGES_BY_NAME = {
+  "수리수리주수리": RESTORED_AVATAR_DATA_URIS.custom_surisuri,
+  "냥냥냐냥": RESTORED_AVATAR_DATA_URIS.custom_nyangnyangnyanyang,
+  "퉈뀌": RESTORED_AVATAR_DATA_URIS.custom_twokkwi,
+  "청춘뭐시기": RESTORED_AVATAR_DATA_URIS.custom_cheongchun,
+  "?": RESTORED_AVATAR_DATA_URIS.custom_question,
+  "풔뤄뤄": RESTORED_AVATAR_DATA_URIS.custom_pworworo
+};
+function avatarImageSrc(item){
+  const name=String(item?.name || "").trim();
+  return RESTORED_AVATAR_IMAGES[item?.id] || RESTORED_AVATAR_IMAGES_BY_NAME[name] || item?.src || "";
+}
 function avatarCreatorLineHtml(item){
   const creator=avatarCreatorId(item);
   if(!creator) return `<div class="small">제작자 미지정 · 판매 수익 ${avatarCreatorPercent()}%</div>`;
@@ -924,7 +1016,7 @@ function selectedAvatarItem(studentId){
 function staticAvatarHtml(studentId, small=false){
   const it=selectedAvatarItem(studentId);
   const cls=small ? "staticAvatarImg small" : "staticAvatarImg";
-  return `<img class="${cls}" src="${it.src}" alt="${it.name}">`;
+  return `<img class="${cls}" src="${avatarImageSrc(it)}" alt="${it.name}">`;
 }
 function pixelAvatarSVG(studentId, mode='large'){
   return staticAvatarHtml(studentId, mode==='small');
@@ -937,7 +1029,7 @@ function avatarPreviewHtml(studentId){
 }
 function itemThumb(item){
   if(item.type==="avatar"){
-    return `<div class="staticAvatarThumb"><img src="${item.src}" alt="${item.name}"></div>`;
+    return `<div class="staticAvatarThumb"><img src="${avatarImageSrc(item)}" alt="${item.name}"></div>`;
   }
   return `<img class="miniAssetThumb" src="${roomAssetSrc(item)}" alt="${item.name}">`;
 }
@@ -1132,48 +1224,610 @@ function allCosmeticItems(){return [...avatarItemCatalog(),...roomItemCatalog(),
 function cosmeticRarityLabel(item){ return item?.rarity || "일반"; }
 function assetUrl(key){ return PIXEL_ASSETS[key] || ''; }
 
+function materialIcon(name, extraClass=""){
+  return `<span class="material-symbols-rounded ${extraClass}" aria-hidden="true">${name}</span>`;
+}
+function normalizedIconName(icon){
+  const raw=String(icon||"").trim();
+  const legacy={
+    "⌂":"home",
+    "🏠":"home",
+    "🏦":"account_balance",
+    "▣":"apps",
+    "▤":"confirmation_number",
+    "▦":"storefront",
+    "▥":"domain",
+    "□":"inventory_2",
+    "◇":"assignment_turned_in",
+    "◉":"groups",
+    "◌":"paid",
+    "◎":"visibility",
+    "♙":"face",
+    "⚙":"settings",
+    "⚖":"balance",
+    "✓":"task_alt",
+    "☑":"check_circle",
+    "✎":"edit_note",
+    "★":"star",
+    "✉":"mail",
+    "₩":"payments",
+    "%":"percent",
+    "!":"priority_high",
+    "+":"add",
+    "≡":"receipt_long"
+  };
+  return legacy[raw] || raw;
+}
+function renderNavIcon(icon){
+  const normalized=normalizedIconName(icon);
+  if(!normalized) return `<span class="tabIcon">•</span>`;
+  return /^[a-z0-9_]+$/i.test(normalized) ? materialIcon(normalized,"tabIcon msIcon") : `<span class="tabIcon">${normalized}</span>`;
+}
+function renderMenuCardIcon(icon){
+  const normalized=normalizedIconName(icon);
+  if(!normalized) return `<span>•</span>`;
+  return /^[a-z0-9_]+$/i.test(normalized) ? materialIcon(normalized,"menuCardIcon msIcon") : `<span>${normalized}</span>`;
+}
+function metaPill(icon,text){
+  return `<span>${materialIcon(icon,'metaIcon msIcon')}${text}</span>`;
+}
+function infoCardIcon(icon){
+  return `<i class="mobileInfoIconV109">${materialIcon(icon,'msIcon')}</i>`;
+}
+
 function studentNavItems(){
-  const items=[
-    ["dashboard","대시보드·재산","⌂"],
-    ["market","시장","▦"],
-    ["products","상점·티켓","▣"],
-    ["finance","은행","🏦"],
-    ["industry","생산·제작","⚙"]
+  if(isMobileViewport()){
+    return [
+      ["finance","통장","account_balance"],
+      ["market","시장","shopping_cart"],
+      ["dashboard","홈","home"],
+      ["noticeboard","알림","notifications"],
+      ["more","메뉴","menu"]
+    ];
+  }
+  const available=studentTabCatalog().filter(tab=>{
+    if(tab.dynamic==="workClaims") return selectedStudent && pieceRateJobsForStudent(selectedStudent).length;
+    if(tab.dynamic==="corporations") return selectedStudent && isCorporationAssignedStudent(selectedStudent);
+    if(tab.dynamic==="role") return selectedStudent && specialRoleIdsForStudent(selectedStudent).length;
+    return true;
+  });
+  return available.filter(tab=>studentTabVisible(tab.id)).map(tab=>[tab.id,tab.name,tab.icon]);
+}
+function studentTabCatalog(){
+  return [
+    {id:"dashboard",name:"대시보드·재산",icon:"⌂",note:"학생 기본 화면"},
+    {id:"noticeboard",name:"알림장",icon:"▣",note:"숙제·준비물·공지와 선생님 메시지"},
+    {id:"market",name:"시장",icon:"▦",note:"학생 간 판매글"},
+    {id:"products",name:"상점·티켓",icon:"▣",note:"상품·티켓 구매"},
+    {id:"finance",name:"은행",icon:"🏦",note:"예금·적금·채권·대출"},
+    {id:"industry",name:"생산·제작",icon:"⚙",note:"생산과 제작"},
+    {id:"workClaims",name:"직업 업무",icon:"◇",note:"성과급 직업 학생에게만 표시",dynamic:"workClaims"},
+    {id:"corporations",name:"법인업무",icon:"▥",note:"법인 계정 학생에게만 표시",dynamic:"corporations"},
+    {id:"role",name:"직업업무",icon:"⚖",note:"특수 직업 학생에게만 표시",dynamic:"role"},
+    {id:"visit",name:"구경하기",icon:"◎",note:"친구 정보와 순위"},
+    {id:"cosmetic",name:"아바타",icon:"♙",note:"아바타 상점과 보유 현황"},
+    {id:"room",name:"미니룸",icon:"▤",note:"미니룸 꾸미기"},
+    {id:"settings",name:"설정",icon:"⚙",note:"학생 신청·거래내역"}
   ];
-  if(selectedStudent && pieceRateJobsForStudent(selectedStudent).length) items.push(["workClaims","직업 업무",""]);
-  if(selectedStudent && isCorporationAssignedStudent(selectedStudent)) items.push(["corporations","법인업무","▥"]);
-  if(selectedStudent && specialRoleIdsForStudent(selectedStudent).length) items.push(["role","직업업무","⚖"]);
-  items.push(
-    ["visit","구경하기","◎"],
-    ["cosmetic","아바타","♙"],
-    ["room","미니룸","▤"],
-    ["settings","설정","⚙"]
-  );
-  return items;
+}
+function studentTabVisible(id){
+  if(id==="dashboard") return true;
+  return obj(data.settings?.hiddenStudentTabs)[id]!==true;
+}
+function isMobileViewport(){return window.matchMedia?.("(max-width: 768px)")?.matches || window.innerWidth<=768}
+window.addEventListener("resize",()=>scheduleRender(120));
+function studentNavBadgeCount(id){
+  if(id!=="noticeboard" || !selectedStudent) return 0;
+  const stats=studentNoticeStats(selectedStudent);
+  return n(stats.todayCount)+n(stats.uncheckedHomework)+n(stats.unreadMessages);
 }
 function studentTabsHtml(active){
   const tabs=studentNavItems();
-  return `<div class="studentTabs topTabs">${tabs.map(([id,name])=>`<button class="${active===id?'active':''}" onclick="setStudentTab('${id}')">${name}</button>`).join('')}</div>`;
+  return `<div class="studentTabs topTabs" data-tab-count="${tabs.length}">${tabs.map(([id,name,icon])=>{
+    const badge=studentNavBadgeCount(id);
+    return `<button data-tab="${id}" class="${active===id?'active':''}" onclick="setStudentTab('${id}')">${renderNavIcon(icon)}<span class="tabLabel">${name}</span>${badge>0?`<span class="navBadge">${badge>99?"99+":badge}</span>`:""}</button>`;
+  }).join('')}</div>`;
+}
+function mobileMenuGrid(cards){
+  return `<div class="mobileMenuGrid">${cards.map(c=>`<button class="mobileMenuCard" data-card-id="${escapeHtml(c.id||"")}" onclick="${c.onClick||`openMobilePage('${c.id}')`}">${renderMenuCardIcon(c.icon)}<b>${c.title}</b><small>${c.description||""}</small>${c.badge?`<em>${c.badge}</em>`:""}</button>`).join("")}</div>`;
+}
+function mobileSubPageHeader(title,back="backMobilePage()"){
+  return `<div class="mobileSubHeader"><button onclick="${back}">‹ 뒤로</button><h2>${title}</h2></div>`;
+}
+function mobileStudentHomeButtonHtml(label="홈"){
+  return `<button class="mobileHomeReturnBtn" onclick="goStudentHome()">${materialIcon("home","msIcon")} ${label}</button>`;
+}
+function mobileNoticeSubHeader(title){
+  return `<div class="mobileSubHeader mobileNoticeSubHeader"><button onclick="backMobilePage()">‹ 뒤로</button><h2>${title}</h2>${mobileStudentHomeButtonHtml("홈")}</div>`;
+}
+window.goStudentHome = function(){
+  studentTab="dashboard";
+  activeMobilePage="";
+  localStorage.setItem("studentTab",studentTab);
+  localStorage.removeItem("activeMobilePage");
+  render();
+}
+window.openMobilePage = function(id){activeMobilePage=id; localStorage.setItem("activeMobilePage",id); render();}
+window.openStudentMobileTarget = function(tab,page=""){
+  studentTab=tab;
+  activeMobilePage=page || "";
+  localStorage.setItem("studentTab",tab);
+  if(activeMobilePage) localStorage.setItem("activeMobilePage",activeMobilePage);
+  else localStorage.removeItem("activeMobilePage");
+  render();
+}
+window.backMobilePage = function(){activeMobilePage=""; localStorage.removeItem("activeMobilePage"); render();}
+window.openMobileTeacherPage = function(id){activeMobileTeacherPage=id; localStorage.setItem("activeMobileTeacherPage",id); render();}
+window.backMobileTeacherPage = function(){activeMobileTeacherPage=""; localStorage.removeItem("activeMobileTeacherPage"); render();}
+
+const NOTICE_TYPES=[
+  {id:"notice",name:"공지",check:false},
+  {id:"homework",name:"숙제",check:true,action:"했어요"},
+  {id:"material",name:"준비물",check:true,action:"확인했어요"},
+  {id:"event",name:"행사",check:false}
+];
+const TEACHER_ID="teacher";
+function noticeTypeInfo(type){return NOTICE_TYPES.find(t=>t.id===type) || NOTICE_TYPES[0]}
+function isTeacherMode(){return mode==="teacher" && teacherUnlocked}
+function hasTeacherAccess(){
+  if(teacherUnlocked) return true;
+  if(sessionStorage.getItem("teacherUnlocked")==="true"){
+    teacherUnlocked=true;
+    return true;
+  }
+  return false;
+}
+function requireTeacherAccess(){
+  if(hasTeacherAccess()) return true;
+  toast("교사 권한이 필요합니다.");
+  showTeacherLogin?.();
+  return false;
+}
+function noticeDateValue(v){
+  if(!v) return "";
+  if(typeof v==="string") return v.slice(0,10);
+  if(v.toDate) return localDateString(v.toDate());
+  return localDateString(v);
+}
+function noticeTsText(v){
+  if(!v) return "-";
+  const d=v.toDate ? v.toDate() : new Date(v);
+  return seoulDateTimeText(d.toISOString());
+}
+function noticeTsDetailText(v){
+  if(!v) return "-";
+  const d=v.toDate ? v.toDate() : new Date(v);
+  if(Number.isNaN(d.getTime())) return "-";
+  const day=d.toLocaleDateString("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
+  const date=d.toLocaleDateString("ko-KR",{timeZone:"Asia/Seoul",month:"2-digit",day:"2-digit"}).replace(/\.\s?/g,".").replace(/\.$/,"");
+  const time=d.toLocaleTimeString("ko-KR",{timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit"});
+  return `${date} (${day}) ${time}`;
+}
+function noticeCheckItems(nc){return arr(nc.checkItems).map(x=>String(x||"").trim()).filter(Boolean)}
+function noticeCheckItemsHtml(nc){
+  const items=noticeCheckItems(nc);
+  if(!items.length) return "";
+  return `<div class="noticeItemList">${items.map(item=>`<span>${escapeHtml(item)}</span>`).join("")}</div>`;
+}
+function noticeTargetsNotice(nc){
+  if((nc.targetType||"all")==="all") return students().map(s=>s.id);
+  return arr(nc.targetStudentIds).filter(id=>student(id));
+}
+function noticeAppliesToStudent(nc,studentId){
+  if(!nc || nc.deleted) return false;
+  if((nc.targetType||"all")==="all") return true;
+  return arr(nc.targetStudentIds).includes(studentId);
+}
+function sortedNotices(rows){
+  return [...rows].filter(n=>!n.deleted).sort((a,b)=>{
+    const da=noticeDateValue(a.dueDate)||"9999-12-31";
+    const db=noticeDateValue(b.dueDate)||"9999-12-31";
+    return da.localeCompare(db) || noticeTimeNumber(b.createdAt)-noticeTimeNumber(a.createdAt);
+  });
+}
+function statusDocId(noticeId,studentId){return `${noticeId}_${studentId}`.replace(/[^a-zA-Z0-9_-]/g,"_")}
+function statusForNoticeStudent(noticeId,studentId){
+  return obj(noticeState.studentStatuses)[statusDocId(noticeId,studentId)] || noticeState.statuses.find(s=>s.noticeId===noticeId && s.studentId===studentId) || null;
+}
+function noticeUnreadForStudent(id){return n(noticeState.studentRoom?.unreadByStudent)}
+function teacherUnreadMessages(){return noticeState.rooms.reduce((sum,r)=>sum+n(r.unreadByTeacher),0)}
+function todayUncheckedNoticeCount(){
+  return sortedNotices(noticeState.all)
+    .filter(nc=>["homework","material"].includes(nc.type) && (!noticeDateValue(nc.dueDate) || noticeDateValue(nc.dueDate)>=today()))
+    .reduce((sum,nc)=>sum+teacherCheckStats(nc).unchecked.length,0);
+}
+function studentNoticeStats(id){
+  const rows=sortedNotices(noticeState.student);
+  const todayRows=rows.filter(nc=>!noticeDateValue(nc.dueDate) || noticeDateValue(nc.dueDate)>=today());
+  const homework=rows.filter(nc=>nc.type==="homework");
+  const unchecked=homework.filter(nc=>!statusForNoticeStudent(nc.id,id)?.checked);
+  return {todayCount:todayRows.length,homeworkCount:homework.length,uncheckedHomework:unchecked.length,unreadMessages:noticeUnreadForStudent(id)};
+}
+function clearUnsubs(list){list.splice(0).forEach(fn=>{try{fn();}catch(_){}})}
+function noticeRecordList(key){
+  return Object.entries(obj(data[key])).map(([id,value])=>({id,...obj(value)}));
+}
+function noticeTimeNumber(v){
+  if(!v) return 0;
+  if(typeof v==="number") return v;
+  if(v?.seconds) return v.seconds*1000;
+  const d=new Date(v);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+function syncNoticeStateFromRealtimeData(){
+  const notices=sortedNotices(noticeRecordList("classroomNotices"));
+  const statuses=noticeRecordList("classroomNoticeStatus");
+  const rooms=noticeRecordList("teacherMessageRooms")
+    .filter(r=>!r.closed)
+    .sort((a,b)=>noticeTimeNumber(b.updatedAt||b.lastMessageAt)-noticeTimeNumber(a.updatedAt||a.lastMessageAt));
+  noticeState.all=notices;
+  noticeState.teacherStatuses=statuses;
+  noticeState.rooms=rooms;
+  if(selectedTeacherMessageRoom && !rooms.some(r=>r.id===selectedTeacherMessageRoom)){
+    selectedTeacherMessageRoom="";
+    localStorage.removeItem("teacherMessageRoom");
+  }
+  if(selectedStudent){
+    noticeState.student=sortedNotices(notices.filter(nc=>noticeAppliesToStudent(nc,selectedStudent)));
+    noticeState.statuses=statuses.filter(s=>s.studentId===selectedStudent);
+    noticeState.studentStatuses=noticeState.statuses.reduce((o,s)=>{o[s.id]=s; return o;},{});
+    const roomId=`room_${selectedStudent}`;
+    const room=obj(data.teacherMessageRooms)[roomId];
+    noticeState.studentRoom=room?{id:roomId,...obj(room)}:null;
+  }else{
+    noticeState.student=[];
+    noticeState.statuses=[];
+    noticeState.studentStatuses={};
+    noticeState.studentRoom=null;
+  }
+  const activeRoomId = mode==="teacher"
+    ? selectedTeacherMessageRoom
+    : (mode==="student" && selectedStudent && (selectedNoticeStudentTab==="message" || studentTab==="noticeboard") ? `room_${selectedStudent}` : "");
+  noticeState.messages = activeRoomId
+    ? noticeRecordList("teacherMessages")
+        .filter(m=>m.roomId===activeRoomId && !m.deleted)
+        .sort((a,b)=>noticeTimeNumber(a.createdAt)-noticeTimeNumber(b.createdAt))
+    : [];
+}
+function setNoticeSnapshot(listName,snap,mapFn){
+  noticeState[listName]=snap.docs.map(d=>({id:d.id,...mapFn(d.data())}));
+  scheduleRender();
+}
+function subscribeStudentNoticeData(studentId){syncNoticeStateFromRealtimeData();}
+function subscribeTeacherNoticeData(){syncNoticeStateFromRealtimeData();}
+function subscribeMessagesForRoom(roomId){syncNoticeStateFromRealtimeData();}
+function ensureNoticeSubscriptions(){syncNoticeStateFromRealtimeData();}
+function noticeTabsHtml(active,teacher=false){
+  const tabs=teacher
+    ? [["create","알림 등록"],["list","알림 목록"],["checks","체크 현황"],["messages",`학생 메시지함${teacherUnreadMessages()?` (${teacherUnreadMessages()})`:""}`]]
+    : [["today","오늘"],["homework","숙제"],["material","준비물"],["events","행사/공지"],["message",`선생님께 메시지${noticeUnreadForStudent(selectedStudent)?` (${noticeUnreadForStudent(selectedStudent)})`:""}`]];
+  return `<div class="studentTabs topTabs">${tabs.map(([id,name])=>`<button class="${active===id?'active':''}" onclick="${teacher?`setTeacherNoticeTab('${id}')`:`setStudentNoticeTab('${id}')`}">${name}</button>`).join("")}</div>`;
+}
+function noticeStatusPill(nc,studentId){
+  const st=statusForNoticeStudent(nc.id,studentId);
+  if(st?.teacherConfirmed) return `<span class="pill green">선생님 확인 완료</span>`;
+  if(st?.checked) return `<span class="pill blue">체크 완료 · 선생님 확인 전</span>`;
+  const due=noticeDateValue(nc.dueDate);
+  if(due && due<today()) return `<span class="pill red">마감 지남</span>`;
+  return `<span class="pill orange">미체크</span>`;
+}
+function noticeCardHtml(nc,studentId){
+  const info=noticeTypeInfo(nc.type);
+  const due=noticeDateValue(nc.dueDate);
+  const st=statusForNoticeStudent(nc.id,studentId);
+  const canCheck=info.check;
+  return `<div class="card noticeCard ${nc.important?'important':''}">
+    <div class="head"><div><h3>${nc.important?"★ ":""}${escapeHtml(nc.title||"제목 없음")}</h3><div class="sub">${info.name}${due?` · ${due}`:""}</div></div>${noticeStatusPill(nc,studentId)}</div>
+    <p>${escapeHtml(nc.content||"").replace(/\n/g,"<br>")}</p>
+    ${noticeCheckItemsHtml(nc)}
+    ${canCheck?`<div class="toolbar"><button class="green" onclick="checkNotice('${nc.id}','${studentId}')" ${st?.teacherConfirmed?"disabled":""}>${st?.checked?"다시 체크":(info.action||"체크")}</button></div>`:""}
+  </div>`;
+}
+function studentNoticeBoardRow(nc,studentId,index){
+  const info=noticeTypeInfo(nc.type);
+  const due=noticeDateValue(nc.dueDate)||"-";
+  const st=statusForNoticeStudent(nc.id,studentId);
+  const canCheck=info.check;
+  const selected=selectedStudentNoticeDetail===nc.id ? " selected" : "";
+  const excerpt=noticeBoardExcerpt(nc.content);
+  return `<tr class="noticeBoardRow${selected}" onclick="openStudentNoticeDetail('${nc.id}')">
+    <td class="noticeBoardNo">${index+1}</td>
+    <td><span class="noticeTypeBadge noticeType_${info.id}">${info.name}</span></td>
+    <td class="noticeBoardTitle"><b>${nc.important?`<span class="noticeImportantMark">중요</span>`:""}${escapeHtml(nc.title||"제목 없음")}</b>${excerpt?`<div class="small">${escapeHtml(excerpt)}</div>`:""}${noticeCheckItemsHtml(nc)}</td>
+    <td>${escapeHtml(due)}</td>
+    <td>${noticeStatusPill(nc,studentId)}</td>
+    <td class="noticeBoardActions"><button onclick="event.stopPropagation();openStudentNoticeDetail('${nc.id}')">상세</button>${canCheck?` <button class="green" onclick="event.stopPropagation();checkNotice('${nc.id}','${studentId}')" ${st?.teacherConfirmed?"disabled":""}>${st?.checked?"다시 체크":(info.action||"체크")}</button>`:""}</td>
+  </tr>`;
+}
+function studentNoticeDetailHtml(noticeId,studentId){
+  const nc=noticeState.student.find(n=>n.id===noticeId);
+  if(!nc) return "";
+  const info=noticeTypeInfo(nc.type);
+  const st=statusForNoticeStudent(nc.id,studentId);
+  const canCheck=info.check;
+  return `<div class="noticeDetailPanel noticeBoardDetail card"><div class="head"><div><h3>${info.name} · ${escapeHtml(nc.title||"제목 없음")}</h3><div class="sub">${noticeDateValue(nc.dueDate)||"-"}</div></div><button onclick="closeStudentNoticeDetail()">닫기</button></div><div class="noticeDetailBody"><div class="noticeDetailMeta"><span class="noticeTypeBadge noticeType_${info.id}">${info.name}</span>${nc.important?`<span class="pill orange">중요</span>`:""}${noticeStatusPill(nc,studentId)}</div><p>${escapeHtml(nc.content||"내용이 없습니다.").replace(/\n/g,"<br>")}</p>${noticeCheckItemsHtml(nc)}</div>${canCheck?`<div class="toolbar"><button class="green" onclick="checkNotice('${nc.id}','${studentId}')" ${st?.teacherConfirmed?"disabled":""}>${st?.checked?"다시 체크":(info.action||"체크")}</button></div>`:""}</div>`;
+}
+function studentNoticeListHtml(type,id){
+  let rows=sortedNotices(noticeState.student);
+  if(type==="today") rows=rows.filter(nc=>!noticeDateValue(nc.dueDate) || noticeDateValue(nc.dueDate)>=today()).slice(0,30);
+  if(type==="homework") rows=rows.filter(nc=>nc.type==="homework");
+  if(type==="material") rows=rows.filter(nc=>nc.type==="material");
+  if(type==="events") rows=rows.filter(nc=>["notice","event"].includes(nc.type));
+  if(!rows.length) return `<p class="small">표시할 알림이 없습니다.</p>`;
+  return `<div class="scroll noticeBoardScroll"><table class="noticeBoardTable studentNoticeBoardTable"><thead><tr><th>No.</th><th>분류</th><th>제목</th><th>날짜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows.map((nc,index)=>studentNoticeBoardRow(nc,id,index)).join("")}</tbody></table></div>${selectedStudentNoticeDetail?studentNoticeDetailHtml(selectedStudentNoticeDetail,id):""}`;
+}
+function noticeboardStudentHtml(id){
+  if(isMobileViewport()) return mobileNoticeboardStudentHtml(id);
+  const stats=studentNoticeStats(id);
+  const listPanel = selectedNoticeStudentTab==="message"
+    ? studentTeacherMessageHtml(id)
+    : `<div class="section noticeListPanel">${studentNoticeListHtml(selectedNoticeStudentTab,id)}</div>`;
+  const messageAside = selectedNoticeStudentTab==="message"
+    ? ""
+    : `<aside class="noticeMessageAside">${studentTeacherMessageHtml(id)}</aside>`;
+  return `<div class="noticeboardPage">
+    <div class="section"><div class="head"><div><h2>알림장</h2><div class="sub">숙제, 준비물, 행사, 공지를 확인하고 선생님께 메시지를 보냅니다.</div></div><span class="pill blue">읽지 않은 답장 ${stats.unreadMessages}</span></div>
+      <div class="grid g3"><div class="stat blue"><div class="label">오늘/다가오는 알림</div><div class="value">${stats.todayCount}개</div></div><div class="stat orange"><div class="label">숙제</div><div class="value">${stats.homeworkCount}개</div></div><div class="stat red"><div class="label">미체크 숙제</div><div class="value">${stats.uncheckedHomework}개</div></div></div>
+      ${noticeTabsHtml(selectedNoticeStudentTab,false)}
+    </div>
+    <div class="noticeboardMain">${listPanel}${messageAside}</div>
+  </div>`;
+}
+function studentNoticeSummaryHtml(id){
+  const stats=studentNoticeStats(id);
+  if(!studentTabVisible("noticeboard")) return "";
+  return `<div class="section"><div class="head"><div><h2>알림장 요약</h2><div class="sub">오늘 확인할 알림과 선생님 답장입니다.</div></div><button onclick="setStudentTab('noticeboard')">알림장 열기</button></div><div class="grid g3"><div class="stat blue"><div class="label">오늘 알림</div><div class="value">${stats.todayCount}개</div></div><div class="stat orange"><div class="label">미체크 숙제</div><div class="value">${stats.uncheckedHomework}개</div></div><div class="stat red"><div class="label">읽지 않은 답장</div><div class="value">${stats.unreadMessages}개</div></div></div></div>`;
+}
+function mobileNoticeboardStudentHtml(id){
+  if(activeMobilePage){
+    const map={today:"오늘의 할 일",homework:"숙제",material:"준비물",events:"행사/공지",message:"선생님께 메시지"};
+    selectedNoticeStudentTab=activeMobilePage;
+    return `${mobileNoticeSubHeader(map[activeMobilePage]||"알림장")}${activeMobilePage==="message"?studentTeacherMessageHtml(id):`<div class="section">${studentNoticeListHtml(activeMobilePage,id)}</div>`}`;
+  }
+  const stats=studentNoticeStats(id);
+  const materialUnchecked=sortedNotices(noticeState.student).filter(nc=>nc.type==="material"&&!statusForNoticeStudent(nc.id,id)?.checked).length;
+  const eventCount=sortedNotices(noticeState.student).filter(nc=>["notice","event"].includes(nc.type)&&(!noticeDateValue(nc.dueDate)||noticeDateValue(nc.dueDate)>=today())).length;
+  return `<div class="section"><div class="head"><div><h2>알림장</h2><div class="sub">필요한 항목만 눌러 확인하세요.</div></div>${mobileStudentHomeButtonHtml("홈으로")}</div>${mobileMenuGrid([
+    {id:"today",icon:"☑",title:"오늘의 할 일",description:"오늘과 다가오는 숙제·준비물",badge:`${stats.todayCount}개`},
+    {id:"homework",icon:"✎",title:"숙제",description:"미체크 숙제 확인",badge:`미체크 ${stats.uncheckedHomework}`},
+    {id:"material",icon:"▣",title:"준비물",description:"가져올 준비물 확인",badge:`미체크 ${materialUnchecked}`},
+    {id:"events",icon:"★",title:"행사/공지",description:"다가오는 행사와 공지",badge:`${eventCount}개`},
+    {id:"message",icon:"✉",title:"선생님께 메시지",description:"궁금한 점 보내기",badge:`안 읽음 ${stats.unreadMessages}`}
+  ])}</div>`;
+}
+function messageTimeHtml(m){return noticeTsText(m.createdAt)}
+function messageBubbleHtml(m,studentId){
+  const mine=m.senderRole==="student" && m.senderId===studentId;
+  return `<div class="messageBubble ${mine?"mine":"teacher"}"><div>${escapeHtml(m.text||"").replace(/\n/g,"<br>")}</div><small>${mine?"나":"선생님"} · ${messageTimeHtml(m)}</small></div>`;
+}
+function studentTeacherMessageHtml(id){
+  const room=noticeState.studentRoom;
+  if(room?.id && !activeMessageUnsub) subscribeMessagesForRoom(room.id);
+  return `<div class="section">
+    <div class="head"><div><h2>선생님께 메시지</h2><div class="sub">선생님께 궁금한 점이나 요청할 일을 보내세요.</div></div></div>
+    <div class="messagePanel">
+      <div class="messageList">${noticeState.messages.map(m=>messageBubbleHtml(m,id)).join("") || `<p class="small">아직 메시지가 없습니다.</p>`}</div>
+      <div class="messageComposer"><textarea id="studentTeacherMessageText" maxlength="300" placeholder="300자 이내로 입력하세요"></textarea><button class="primary" onclick="sendStudentTeacherMessage()">보내기</button></div>
+    </div>
+  </div>`;
+}
+function teacherNoticeFormHtml(){
+  return `<div class="section teacherNoticeCreateSection"><div class="head"><div><h2>알림 등록</h2><div class="sub">숙제, 준비물, 행사, 공지를 학생 알림장에 등록합니다.</div></div><button type="button" class="primary" onclick="saveClassroomNotice()">등록하기</button></div>
+    <form class="teacherNoticeForm" onsubmit="event.preventDefault(); saveClassroomNotice();">
+      <div class="grid g2"><div class="card">
+        <div class="field"><label>제목</label><input id="noticeTitle" maxlength="80" autocomplete="off" placeholder="예: 수학 숙제, 체험학습 준비물"></div>
+        <div class="field"><label>유형</label><select id="noticeType" onchange="updateNoticeTypeFields()">${NOTICE_TYPES.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select></div>
+        <div id="noticeCheckItemsBox" class="noticeCheckItemsBox hidden">
+          <label><b>숙제/준비물 선택 항목</b></label>
+          <textarea id="noticeCheckItems" placeholder="예: 수학 익힘 42쪽&#10;예: 줄공책&#10;한 줄에 하나씩 적으면 학생 화면에 항목으로 표시됩니다." style="width:100%;min-height:110px;margin-top:8px"></textarea>
+          <div class="toolbar"><button type="button" onclick="fillNoticeCheckPreset('homework')">숙제 예시</button><button type="button" onclick="fillNoticeCheckPreset('material')">준비물 예시</button></div>
+        </div>
+        <div class="field"><label>마감일/행사일</label><input id="noticeDueDate" type="date" value="${today()}"></div>
+        <label class="checkLine"><input id="noticeImportant" type="checkbox"> 중요 알림</label>
+        <div class="field"><label>대상</label><select id="noticeTargetType" onchange="toggleNoticeTargetStudents()"><option value="all">전체</option><option value="selected">개별 학생 선택</option></select></div>
+        <div id="noticeTargetStudents" class="studentCheckGrid hidden">${students().map(s=>`<label><input type="checkbox" class="noticeTargetStudent" value="${s.id}"> ${escapeHtml(s.name)}</label>`).join("")}</div>
+      </div><div class="card"><label><b>내용</b></label><textarea id="noticeContent" style="width:100%;min-height:210px;margin-top:8px" maxlength="1000" placeholder="학생에게 보여 줄 내용을 적으세요."></textarea><div class="teacherNoticeSubmitRow"><button type="submit" class="primary noticeSubmitBtn">알림 등록</button><button type="button" onclick="resetNoticeForm()">새 알림 쓰기</button></div><div id="noticeSaveHint" class="pendingHint">등록 버튼을 누르면 즉시 알림장에 저장됩니다.</div></div></div>
+    </form>
+  </div>`;
+}
+function noticeTargetSummaryText(nc){
+  if((nc.targetType||"all")==="all") return "전체";
+  const names=arr(nc.targetStudentIds).map(studentName).filter(Boolean);
+  if(!names.length) return "선택 없음";
+  return names.length<=3 ? names.join(", ") : `${names.slice(0,3).join(", ")} 외 ${names.length-3}명`;
+}
+function noticeBoardExcerpt(text){
+  const value=String(text||"").replace(/\s+/g," ").trim();
+  return value.length>92 ? `${value.slice(0,92)}...` : value;
+}
+function teacherNoticeBoardRow(nc,index){
+  const info=noticeTypeInfo(nc.type);
+  const stats=teacherCheckStats(nc);
+  const selected=selectedTeacherNoticeDetail===nc.id ? " selected" : "";
+  const due=noticeDateValue(nc.dueDate)||"-";
+  const excerpt=noticeBoardExcerpt(nc.content);
+  return `<tr class="noticeBoardRow${selected}" onclick="openTeacherNoticeDetail('${nc.id}')">
+    <td class="noticeBoardNo">${index+1}</td>
+    <td><span class="noticeTypeBadge noticeType_${info.id}">${info.name}</span></td>
+    <td class="noticeBoardTitle"><b>${nc.important?`<span class="noticeImportantMark">중요</span>`:""}${escapeHtml(nc.title||"제목 없음")}</b>${excerpt?`<div class="small">${escapeHtml(excerpt)}</div>`:""}${noticeCheckItemsHtml(nc)}</td>
+    <td>${escapeHtml(due)}</td>
+    <td>${escapeHtml(noticeTargetSummaryText(nc))}</td>
+    <td><div class="noticeBoardProgress"><b>${stats.checked.length}</b><span>/ ${stats.targets.length}</span></div><div class="small">확인 ${stats.confirmed.length}</div></td>
+    <td class="noticeBoardActions"><button onclick="event.stopPropagation();openTeacherNoticeDetail('${nc.id}')">상세</button><button onclick="event.stopPropagation();editClassroomNotice('${nc.id}')">수정</button><button class="danger" onclick="event.stopPropagation();deleteClassroomNotice('${nc.id}')">삭제</button></td>
+  </tr>`;
+}
+function teacherNoticeListHtml(){
+  const rows=sortedNotices(noticeState.all);
+  if(!rows.length) return `<p class="small">등록한 알림이 없습니다.</p>`;
+  return `<div class="section noticeBoardSection"><div class="head"><div><h2>알림 게시판</h2><div class="sub">글을 누르면 세부 내용과 학생별 체크 현황을 볼 수 있습니다.</div></div><button class="primary" onclick="setTeacherNoticeTab('create')">새 글 쓰기</button></div><div class="scroll noticeBoardScroll"><table class="noticeBoardTable"><thead><tr><th>No.</th><th>분류</th><th>제목</th><th>날짜</th><th>대상</th><th>체크</th><th>관리</th></tr></thead><tbody>${rows.map(teacherNoticeBoardRow).join("")}</tbody></table></div>${selectedTeacherNoticeDetail?teacherNoticeDetailHtml(selectedTeacherNoticeDetail):""}</div>`;
+}
+function noticeStatusForTeacher(noticeId,studentId){
+  return noticeState.teacherStatuses.find(s=>s.noticeId===noticeId && s.studentId===studentId) || null;
+}
+function teacherNoticeDetailHtml(noticeId){
+  const nc=noticeState.all.find(n=>n.id===noticeId);
+  if(!nc) return "";
+  const stats=teacherCheckStats(nc);
+  const info=noticeTypeInfo(nc.type);
+  return `<div class="noticeDetailPanel noticeBoardDetail card"><div class="head"><div><h3>${info.name} · ${escapeHtml(nc.title||"제목 없음")}</h3><div class="sub">${noticeDateValue(nc.dueDate)||"-"} · 대상 ${stats.targets.length}명 · 학생 체크 ${stats.checked.length}명 · 교사 확인 ${stats.confirmed.length}명</div></div><button onclick="closeTeacherNoticeDetail()">닫기</button></div><div class="noticeDetailBody"><div class="noticeDetailMeta"><span class="noticeTypeBadge noticeType_${info.id}">${info.name}</span>${nc.important?`<span class="pill orange">중요</span>`:""}<span class="pill blue">대상 ${escapeHtml(noticeTargetSummaryText(nc))}</span></div><p>${escapeHtml(nc.content||"내용이 없습니다.").replace(/\n/g,"<br>")}</p>${noticeCheckItemsHtml(nc)}</div><div class="scroll"><table><thead><tr><th>학생</th><th>체크 상태</th><th>체크한 요일/시간</th><th>교사 확인</th><th>처리</th></tr></thead><tbody>${stats.targets.map(id=>{const s=noticeStatusForTeacher(nc.id,id); return `<tr><td><b>${studentName(id)}</b></td><td>${s?.checked?`<span class="pill blue">체크 완료</span>`:`<span class="pill orange">미체크</span>`}</td><td>${s?.checkedAt?noticeTsDetailText(s.checkedAt):"-"}</td><td>${s?.teacherConfirmed?`<span class="pill green">확인 완료</span><br><span class="small">${noticeTsDetailText(s.teacherConfirmedAt)}</span>`:`<span class="small">대기</span>`}</td><td><button class="green" onclick="confirmNoticeStatus('${nc.id}','${id}')" ${s?.teacherConfirmed?"disabled":""}>확인 완료</button></td></tr>`}).join("")}</tbody></table></div></div>`;
+}
+function teacherCheckStats(nc){
+  const targets=noticeTargetsNotice(nc);
+  const checked=targets.filter(id=>noticeStatusForTeacher(nc.id,id)?.checked);
+  const confirmed=targets.filter(id=>noticeStatusForTeacher(nc.id,id)?.teacherConfirmed);
+  return {targets,checked,confirmed,unchecked:targets.filter(id=>!noticeStatusForTeacher(nc.id,id)?.checked)};
+}
+function teacherCheckStatusHtml(){
+  const rows=sortedNotices(noticeState.all).filter(nc=>["homework","material"].includes(nc.type));
+  if(!rows.length) return `<div class="section"><p class="small">체크할 숙제/준비물 알림이 없습니다.</p></div>`;
+  return `<div class="section"><div class="head"><div><h2>숙제/준비물 체크 현황</h2><div class="sub">학생별 체크와 교사 확인 상태를 관리합니다.</div></div><label><input type="checkbox" ${noticeUncheckedOnly?"checked":""} onchange="setNoticeUncheckedOnly(this.checked)"> 미체크 학생만 보기</label></div>${rows.map(nc=>{
+    const st=teacherCheckStats(nc);
+    const targetRows=(noticeUncheckedOnly?st.unchecked:st.targets);
+    return `<div class="card clickableNoticeCard" style="margin-bottom:12px" onclick="openTeacherNoticeDetail('${nc.id}')"><div class="head"><div><h3>${noticeTypeInfo(nc.type).name} · ${escapeHtml(nc.title||"")}</h3><div class="sub">${noticeDateValue(nc.dueDate)||"-"} · 클릭하면 시간 상세를 봅니다</div></div><div class="toolbar"><span class="pill blue">대상 ${st.targets.length}</span><span class="pill green">체크 ${st.checked.length}</span><span class="pill purple">확인 ${st.confirmed.length}</span><span class="pill orange">미체크 ${st.unchecked.length}</span></div></div>
+      ${noticeCheckItemsHtml(nc)}<div class="scroll" onclick="event.stopPropagation()"><table><thead><tr><th>학생</th><th>체크</th><th>체크 요일/시간</th><th>교사 확인</th><th>처리</th></tr></thead><tbody>${targetRows.map(id=>{const s=noticeStatusForTeacher(nc.id,id); return `<tr><td><b>${studentName(id)}</b></td><td>${s?.checked?`<span class="pill blue">체크 완료</span>`:`<span class="pill orange">미체크</span>`}</td><td>${s?.checkedAt?noticeTsDetailText(s.checkedAt):"-"}</td><td>${s?.teacherConfirmed?`<span class="pill green">확인 완료</span>`:`<span class="small">대기</span>`}</td><td><button class="green" onclick="confirmNoticeStatus('${nc.id}','${id}')" ${s?.teacherConfirmed?"disabled":""}>확인 완료</button></td></tr>`}).join("")}</tbody></table></div></div>`;
+  }).join("")}</div>`;
+}
+function teacherRoomsHtml(){
+  const q=teacherMessageSearch.trim();
+  const rooms=noticeState.rooms.filter(r=>!q || studentName(r.studentId).includes(q) || String(r.lastMessage||"").includes(q));
+  return `<div class="teacherMessageGrid"><div class="card"><div class="field"><label>검색</label><input value="${escapeHtml(teacherMessageSearch)}" oninput="setTeacherMessageSearch(this.value)" placeholder="학생 이름 또는 내용"></div><div class="messageRoomList">${rooms.map(r=>`<button class="messageRoomBtn ${selectedTeacherMessageRoom===r.id?"active":""} ${n(r.unreadByTeacher)>0?"unread":""}" onclick="openTeacherMessageRoom('${r.id}')"><b>${studentName(r.studentId)}</b><span>${escapeHtml(r.lastMessage||"").slice(0,42)}</span><em>${noticeTsText(r.lastMessageAt)}</em>${n(r.unreadByTeacher)>0?`<i>${n(r.unreadByTeacher)}</i>`:""}</button>`).join("") || `<p class="small">메시지방이 없습니다.</p>`}</div></div><div>${teacherRoomDetailHtml()}</div></div>`;
+}
+function teacherRoomDetailHtml(){
+  const room=noticeState.rooms.find(r=>r.id===selectedTeacherMessageRoom);
+  if(!room) return `<div class="card"><p class="small">학생 메시지방을 선택하세요.</p></div>`;
+  return `<div class="card"><div class="head"><div><h3>${studentName(room.studentId)} 메시지방</h3><div class="sub">최근 메시지 50개</div></div></div><div class="messageList">${noticeState.messages.map(m=>messageBubbleHtml(m,room.studentId)).join("") || `<p class="small">메시지가 없습니다.</p>`}</div><div class="messageComposer"><textarea id="teacherReplyText" maxlength="300" placeholder="답장을 입력하세요"></textarea><button class="primary" onclick="sendTeacherReply()">답장</button></div></div>`;
+}
+function renderNoticeboardTeacher(){
+  const allowedTeacherNoticeTabs=["create","list","checks","messages"];
+  if(!allowedTeacherNoticeTabs.includes(selectedTeacherNoticeTab)){
+    selectedTeacherNoticeTab="create";
+    localStorage.setItem("teacherNoticeTab","create");
+  }
+  const teacherNoticeMenu = `<div class="noticeActionGrid">${[
+    {id:"create",icon:"+",title:"알림 등록",description:"숙제, 준비물, 행사, 공지를 새로 작성"},
+    {id:"list",icon:"≡",title:"알림 목록",description:"등록한 알림 수정/삭제",badge:`${noticeState.all.length}개`},
+    {id:"checks",icon:"✓",title:"체크 현황",description:"학생별 숙제·준비물 체크 확인",badge:`미체크 ${todayUncheckedNoticeCount()}`},
+    {id:"messages",icon:"✉",title:"학생 메시지함",description:"학생 메시지 전체 확인과 답장",badge:`미읽음 ${teacherUnreadMessages()}`}
+  ].map(c=>`<button class="noticeActionCard ${selectedTeacherNoticeTab===c.id?"active":""}" onclick="setTeacherNoticeTab('${c.id}')"><span>${c.icon}</span><b>${c.title}</b><small>${c.description}</small>${c.badge?`<em>${c.badge}</em>`:""}</button>`).join("")}</div>`;
+  if(isMobileViewport()){
+    const renderPage=()=>{
+      const tab=activeMobileTeacherPage;
+      selectedTeacherNoticeTab=tab;
+      const title={create:"알림 등록",list:"알림 목록",checks:"체크 현황",messages:"학생 메시지함"}[tab] || "알림장";
+      const body=tab==="create"?teacherNoticeFormHtml():tab==="list"?teacherNoticeListHtml():tab==="checks"?teacherCheckStatusHtml():`<div class="section"><div class="head"><div><h2>학생 메시지함</h2><div class="sub">학생별 1:1 메시지방입니다.</div></div></div>${teacherRoomsHtml()}</div>`;
+      return `${mobileSubPageHeader(title,"backMobileTeacherPage()")}${body}`;
+    };
+    document.getElementById("noticeboard").innerHTML = activeMobileTeacherPage
+      ? `<div class="noticeboardPage">${renderPage()}</div>`
+      : `<div class="noticeboardPage"><div class="section"><div class="head"><div><h2>알림장</h2><div class="sub">알림 등록, 체크 현황, 메시지함을 메뉴로 나눠 관리합니다.</div></div><span class="pill red">읽지 않은 메시지 ${teacherUnreadMessages()}</span></div>${mobileMenuGrid([
+          {id:"create",icon:"+",title:"알림 등록",description:"숙제, 준비물, 행사, 공지 작성"},
+          {id:"list",icon:"≡",title:"알림 목록",description:"등록한 알림 수정/삭제",badge:`${noticeState.all.length}개`},
+          {id:"checks",icon:"✓",title:"숙제 체크 현황",description:"학생별 체크와 교사 확인"},
+          {id:"checks",icon:"□",title:"준비물 체크 현황",description:"미체크 학생만 보기 지원"},
+          {id:"messages",icon:"✉",title:"학생 메시지함",description:"학생 메시지 확인과 답장",badge:`미읽음 ${teacherUnreadMessages()}`}
+        ].map(c=>({...c,onClick:`openMobileTeacherPage('${c.id}')`})))}</div></div>`;
+    return;
+  }
+  document.getElementById("noticeboard").innerHTML=`<div class="noticeboardPage"><div class="section"><div class="head"><div><h2>알림장</h2><div class="sub">알림 등록, 체크 현황, 학생 메시지를 관리합니다.</div></div><span class="pill red">읽지 않은 메시지 ${teacherUnreadMessages()}</span></div>${teacherNoticeMenu}${noticeTabsHtml(selectedTeacherNoticeTab,true)}</div>${selectedTeacherNoticeTab==="create"?teacherNoticeFormHtml():selectedTeacherNoticeTab==="list"?teacherNoticeListHtml():selectedTeacherNoticeTab==="checks"?teacherCheckStatusHtml():`<div class="section"><div class="head"><div><h2>학생 메시지함</h2><div class="sub">학생별 1:1 메시지방입니다. 선택한 학생방의 전체 메시지를 표시합니다.</div></div></div>${teacherRoomsHtml()}</div>`}</div>`;
+}
+function studentDesktopNavLabel(id,name){
+  const labels={
+    dashboard:"대시보드",
+    finance:"통장",
+    market:"자유시장",
+    products:"티켓",
+    noticeboard:"알림장",
+    visit:"순위",
+    industry:"직업",
+    settings:"설정",
+    cosmetic:"아바타",
+    room:"미니룸",
+    workClaims:"업무",
+    corporations:"법인",
+    role:"역할"
+  };
+  return labels[id] || name;
+}
+function studentDesktopNavIcon(id,icon){
+  const icons={
+    dashboard:"home",
+    finance:"account_balance_wallet",
+    market:"storefront",
+    products:"confirmation_number",
+    noticeboard:"event_note",
+    visit:"emoji_events",
+    industry:"business_center",
+    settings:"settings",
+    cosmetic:"face",
+    room:"chair",
+    workClaims:"assignment_turned_in",
+    corporations:"domain",
+    role:"verified"
+  };
+  const normalized=normalizedIconName(icon);
+  const name=icons[id] || (/^[a-z0-9_]+$/i.test(normalized||"") ? normalized : "apps");
+  return materialIcon(name,"msIcon");
 }
 function studentSideNavHtml(active){
-  return `<aside class="sideNav">
-    <div class="sideBrand">경제<br>교실</div>
-    <div class="sideNavScroll">${studentNavItems().map(([id,name,icon])=>`<button class="sideNavBtn ${active===id?'active':''}" onclick="setStudentTab('${id}')" title="${name}"><span>${icon}</span><b>${name}</b></button>`).join("")}</div>
-    <button class="sideTeacherBtn" onclick="askTeacherPassword()" title="교사용 화면으로 이동"><span>♛</span><b>교사용</b></button>
+  return `<aside class="sideNav desktopStudentSidebar">
+    <div class="sideBrand desktopSideBrand"><span class="desktopSideLogo">${materialIcon("local_florist","msIcon")}</span><span><b>경제교실</b><em>교실 경제 앱</em></span></div>
+    <div class="sideNavScroll">${studentNavItems().map(([id,name,icon])=>`<button class="sideNavBtn ${active===id?'active':''}" onclick="setStudentTab('${id}')" title="${studentDesktopNavLabel(id,name)}"><span class="sideNavIcon">${studentDesktopNavIcon(id,icon)}</span><b>${studentDesktopNavLabel(id,name)}</b></button>`).join("")}</div>
+    <div class="desktopSideScene" aria-hidden="true">${materialIcon("potted_plant","msIcon")}<span>${materialIcon("savings","msIcon")}</span></div>
+    <button class="sideTeacherBtn" onclick="askTeacherPassword()" title="교사용 화면으로 이동"><span class="sideNavIcon">${materialIcon("admin_panel_settings","msIcon")}</span><b>교사용</b></button>
   </aside>`;
 }
 function studentTabTitle(tab){
   return (studentNavItems().find(([id])=>id===tab)?.[1]) || "대시보드";
 }
+function studentClassLabel(s={}){
+  const direct=s.className || s.classroom || s.room || s.group || s["class"];
+  if(direct) return String(direct);
+  const grade=s.grade || s.schoolGrade || s.gradeNumber;
+  const classNo=s.classNo || s.classNumber || s.ban;
+  if(grade && classNo) return `${grade}학년 ${classNo}반`;
+  if(grade) return `${grade}학년`;
+  return "경제교실";
+}
+function studentDesktopPageTitle(tab){
+  const titles={
+    dashboard:"대시보드·재산",
+    noticeboard:"알림장",
+    market:"시장",
+    products:"상점·티켓",
+    finance:"은행",
+    industry:"직업업무",
+    workClaims:"직업업무",
+    corporations:"직업업무",
+    role:"직업업무",
+    visit:"구경하기",
+    cosmetic:"아바타",
+    room:"미니룸",
+    settings:"설정",
+    more:"메뉴"
+  };
+  return titles[tab] || studentTabTitle(tab);
+}
+function studentDesktopPageSubtitle(tab,id){
+  if(tab==="visit") return "친구의 경제 활동을 살펴보고, 함께 성장해요!";
+  if(tab==="noticeboard") return "중요한 공지와 과제를 확인하고 선생님께 메시지를 보내요.";
+  if(tab==="finance") return "예금, 적금, 대출을 관리합니다.";
+  if(tab==="market") return `${studentName(id)} 학생 경제 앱`;
+  if(tab==="cosmetic") return `${studentName(id)} 학생 경제 앱`;
+  if(tab==="settings") return "학생 정보, 신청 내역, 거래내역을 확인합니다.";
+  return `${studentName(id)} 학생 경제 앱`;
+}
 function studentAppHeaderHtml(s,id){
+  const stats=studentNoticeStats(id);
   const pending=arr(data.requests).filter(r=>r.studentId===id).length;
-  return `<header class="tabletHeader">
-    <div><h1>${studentTabTitle(studentTab)}</h1><div class="sub">${s.name} 학생 경제 앱</div></div>
-    <div class="headerTools">
-      <span class="headerBadge">보유 ${won(balanceOf(id))}</span>
-      <span class="headerBadge">신청 ${pending}건</span>
-      <button class="teacherAccessBtn" onclick="askTeacherPassword()">교사용</button>
-      <div class="studentProfileMini">${staticAvatarHtml(id,true)}<div><b>${s.name}</b><span>${rankOfStudent(id)}위</span></div></div>
+  const noticeCount=n(stats.todayCount)+n(stats.uncheckedHomework)+n(stats.unreadMessages);
+  return `<header class="tabletHeader desktopStudentTopbar">
+    <div class="desktopPageTitle"><h1>${studentDesktopPageTitle(studentTab)} <span>🌱</span></h1><p>${escapeHtml(studentDesktopPageSubtitle(studentTab,id))}</p></div>
+    <div class="desktopHeaderActions">
+      <button class="desktopHeaderChip assetChip" onclick="setStudentTab('finance')">${materialIcon("nutrition","msIcon")} 보유 ${won(balanceOf(id))}</button>
+      <button class="desktopHeaderChip noticeChip" onclick="setStudentTab('noticeboard')">${materialIcon("notifications","msIcon")} 알림 ${noticeCount}건${noticeCount?`<span class="desktopNoticeBubble">${noticeCount}</span>`:""}</button>
+      <button class="desktopHeaderChip requestChip" onclick="setStudentTab('settings')">${materialIcon("assignment","msIcon")} 신청 ${pending}건</button>
+      <button class="desktopHeaderChip teacherChip" onclick="askTeacherPassword()">${materialIcon("school","msIcon")} 교사용</button>
+      <button class="desktopProfileButton" onclick="setStudentTab('settings')">${staticAvatarHtml(id,true)}<span><b>${escapeHtml(s.name||studentName(id))}</b><em>${escapeHtml(studentClassLabel(s))}</em></span>${materialIcon("expand_more","msIcon")}</button>
     </div>
   </header>`;
 }
@@ -1216,11 +1870,31 @@ function assetRankingRows(){
     total:totalAssetsOf(s.id)
   })).sort((a,b)=>b.total-a.total);
 }
+function friendStatusListHtml({mobile=false,limit=0}={}){
+  const rows=assetRankingRows();
+  const shown=limit>0 ? rows.slice(0,limit) : rows;
+  if(!shown.length) return `<p class="small">등록된 학생이 없습니다.</p>`;
+  const list=shown.map((r,i)=>{
+    const status=studentStatusMessageOf(r.id);
+    const jobName=studentJobName(student(r.id)) || "직업 없음";
+    const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`;
+    return `<button class="friendRankRow ${i<3?`top${i+1}`:""}" onclick="openRankStudent('${r.id}')">
+      <span class="friendRankNo">${medal}</span>
+      <span class="friendAvatar">${staticAvatarHtml(r.id,true)}</span>
+      <span class="friendMain"><b>${escapeHtml(r.name)}</b><em>${escapeHtml(status)}</em></span>
+      <span class="friendMeta"><small>${escapeHtml(jobName)}</small><strong>${won(r.total)}</strong></span>
+    </button>`;
+  }).join("");
+  return `<div class="friendRankList ${mobile?'mobileFriendRankList':'desktopFriendRankList'}" aria-label="학생 친구 목록 순위">${list}</div>`;
+}
 function assetRankingTableHtml(limit=0){
   const rows=assetRankingRows();
   const shown=limit>0 ? rows.slice(0,limit) : rows;
   if(!shown.length) return `<p class="small">등록된 학생이 없습니다.</p>`;
-  return `<div class="scroll"><table class="rankTable"><thead><tr><th>순위</th><th>학생</th><th>신용도</th><th class="num">현금</th><th class="num">예금</th><th class="num">채권</th><th class="num">상품</th><th class="num">티켓</th><th class="num">법인주식</th><th class="num">총자산</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td><b>${i+1}위</b></td><td>${r.name}</td><td>${creditScorePill(r.id)}</td><td class="num">${won(r.cash)}</td><td class="num">${won(r.deposit)}</td><td class="num">${won(r.bonds)}</td><td class="num">${won(r.inventory)}</td><td class="num">${won(r.tickets)}</td><td class="num">${won(r.corporate)}</td><td class="num"><b>${won(r.total)}</b></td></tr>`).join("")}</tbody></table></div>`;
+  if(isMobileViewport()){
+    return friendStatusListHtml({mobile:true,limit});
+  }
+  return `<div class="scroll rankScroll"><table class="rankTable"><thead><tr><th>순위</th><th>학생</th><th>신용도</th><th class="num">현금</th><th class="num">예금</th><th class="num">채권</th><th class="num">상품</th><th class="num">티켓</th><th class="num">법인주식</th><th class="num">총자산</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="rankClickableRow ${i===0?'top1':i===1?'top2':i===2?'top3':''}" onclick="openRankStudent('${r.id}')"><td data-label="순위"><b>${i+1}위</b></td><td data-label="학생">${r.name}</td><td data-label="신용도">${creditScorePill(r.id)}</td><td class="num" data-label="현금">${won(r.cash)}</td><td class="num" data-label="예금">${won(r.deposit)}</td><td class="num" data-label="채권">${won(r.bonds)}</td><td class="num" data-label="상품">${won(r.inventory)}</td><td class="num" data-label="티켓">${won(r.tickets)}</td><td class="num" data-label="법인주식">${won(r.corporate)}</td><td class="num" data-label="총자산"><b>${won(r.total)}</b></td></tr>`).join("")}</tbody></table></div>`;
 }
 function corporationRankingRows(){
   return corporations().map(c=>({
@@ -1238,7 +1912,10 @@ function corporationRankingTableHtml(limit=0){
   const rows=corporationRankingRows();
   const shown=limit>0 ? rows.slice(0,limit) : rows;
   if(!shown.length) return `<p class="small">등록된 법인이 없습니다.</p>`;
-  return `<div class="scroll"><table class="rankTable corporationRankTable"><thead><tr><th>순위</th><th>법인</th><th>대표</th><th class="num">현금</th><th class="num">순자산</th><th class="num">공식 주가</th><th class="num">주주 수</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td><b>${i+1}위</b></td><td><b>${r.name}</b></td><td>${r.representative||"-"}</td><td class="num">${won(r.cash)}</td><td class="num"><b>${won(r.net)}</b></td><td class="num">${won(r.sharePrice)}</td><td class="num">${r.shareholders||r.members}명</td></tr>`).join("")}</tbody></table></div>`;
+  if(isMobileViewport()){
+    return `<div class="mobileRankOneLineList corpRankOneLineList" aria-label="법인 재산 순위">${shown.map((r,i)=>`<div class="mobileRankOneLine corp ${i===0?'top1':i===1?'top2':i===2?'top3':''}"><b class="rankNo">${i+1}위</b><span class="rankName">${r.name}</span><span class="rankCredit">${r.representative||'-'}</span><strong class="rankTotal">${won(r.net)}</strong></div>`).join("")}</div>`;
+  }
+  return `<div class="scroll rankScroll"><table class="rankTable corporationRankTable"><thead><tr><th>순위</th><th>법인</th><th>대표</th><th class="num">현금</th><th class="num">순자산</th><th class="num">공식 주가</th><th class="num">주주 수</th></tr></thead><tbody>${shown.map((r,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}"><td data-label="순위"><b>${i+1}위</b></td><td data-label="법인"><b>${r.name}</b></td><td data-label="대표">${r.representative||"-"}</td><td class="num" data-label="현금">${won(r.cash)}</td><td class="num" data-label="순자산"><b>${won(r.net)}</b></td><td class="num" data-label="공식 주가">${won(r.sharePrice)}</td><td class="num" data-label="주주 수">${r.shareholders||r.members}명</td></tr>`).join("")}</tbody></table></div>`;
 }
 function dailyAssetCandles(id){
   const led=obj(derived.ledgerByAccount)[id] || [];
@@ -1340,11 +2017,11 @@ function studentSummaryCardsHtml(id){
   const ticketValue=ticketValueOf(id);
   const corpValue=corporateEquityValueOf(id);
   return `<div class="tabletStatGrid">
-    <div class="tabletStat blue"><span>잔고</span><b>${won(balanceOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
-    <div class="tabletStat green"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>안전 보관</em></div>
-    <div class="tabletStat orange"><span>보유 티켓 가치</span><b>${won(ticketValue)}</b><em>현재 판매가 기준</em></div>
-    <div class="tabletStat purple"><span>법인 지분 가치</span><b>${won(corpValue)}</b><em>공식 주가 기준</em></div>
-    <div class="tabletStat yellow"><span>오늘 소득</span><b>${won(studentTodayIncome(id))}</b><em>오늘 입금 합계</em></div>
+    <div class="tabletStat blue" data-stat-icon="account_balance_wallet"><span>잔고</span><b>${won(balanceOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
+    <div class="tabletStat green" data-stat-icon="savings"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>안전 보관</em></div>
+    <div class="tabletStat orange" data-stat-icon="confirmation_number"><span>보유 티켓 가치</span><b>${won(ticketValue)}</b><em>현재 판매가 기준</em></div>
+    <div class="tabletStat purple" data-stat-icon="domain"><span>법인 지분 가치</span><b>${won(corpValue)}</b><em>공식 주가 기준</em></div>
+    <div class="tabletStat yellow" data-stat-icon="payments"><span>오늘 소득</span><b>${won(studentTodayIncome(id))}</b><em>오늘 입금 합계</em></div>
   </div>`;
 }
 function studentRequestSummaryHtml(id,limit=5){
@@ -1378,11 +2055,95 @@ function studentDashboardHeroHtml(id){
       <p class="small">현재 적용 아바타: <b>${av?.name||"기본 아바타"}</b></p>
       <div class="toolbar">${creditScorePill(id)}<span class="pill orange">직무유기 ${dutyStage(id)}단계</span></div>
       <div class="toolbar">
-        <button class="blue" onclick="setStudentTab('cosmetics')">아바타 상점</button>
+        <button class="blue" onclick="setStudentTab('cosmetic')">아바타 상점</button>
         <button onclick="showAvatarPreviewLarge('${av?.id||"avatar_01"}')">크게 보기</button>
       </div>
     </div>
   </div>`;
+}
+
+
+function studentStatusMessageOf(id){
+  const raw = obj(data.studentStatusMessages)[id] ?? student(id)?.statusMessage ?? "";
+  return String(raw || "").trim() || "우리 반 함께 성장하는 중";
+}
+function studentStatusMessageEditing(id){
+  return window.__editingStudentStatusId === id;
+}
+function mobileStudentHomeLiteHtml(id, mode="self"){
+  const s = student(id);
+  if(!s) return `<div class="section"><p class="small">학생을 찾을 수 없습니다.</p></div>`;
+  return `<div class="mobilePage mobileHomePage ${mode==="peer"?"peerHomePage":""}">
+    ${mobileHomeAvatarHeroHtml(id,{viewer:mode})}
+    ${mobileHomeInfoCardsHtml(id,{viewer:mode})}
+  </div>`;
+}
+function mobileRankStudentHomeHtml(id){
+  const s=student(id);
+  if(!s) return `<div class="section"><p class="small">학생을 찾을 수 없습니다.</p></div>`;
+  return `${mobileSubPageHeader(`${s.name} 홈`, "backMobilePage()")}${mobileStudentHomeLiteHtml(id,"peer")}`;
+}
+
+function mobileHomeMarketSignal(){
+  const info=ticketPriceInfo("classClean");
+  const rate=n(info.changeRate);
+  if(rate>0.5) return {tone:"up",label:"상승",value:`▲ ${pct(rate)}`,note:"티켓 시장"};
+  if(rate<-0.5) return {tone:"down",label:"하락",value:`▼ ${pct(Math.abs(rate))}`,note:"티켓 시장"};
+  return {tone:"flat",label:"안정",value:"보합",note:"티켓 시장"};
+}
+function mobileHomeAvatarHeroHtml(id, options={}){
+  const s=student(id) || {};
+  const av=selectedAvatarItem(id);
+  const credit=creditScoreInfo(id);
+  const jobName=studentJobName(s)||"직업 없음";
+  const rank=rankOfStudent(id);
+  const canEdit=(options.viewer||"self")==="self" && id===selectedStudent;
+  const editing=canEdit && studentStatusMessageEditing(id);
+  const status=studentStatusMessageOf(id);
+  const statusHtml=editing
+    ? `<div class="mobileStatusEditor"><input id="studentStatusMessageInput" maxlength="30" value="${escapeHtml(status)}" onkeydown="if(event.key==='Enter') saveStudentStatusMessage('${id}')"><button class="green" onclick="saveStudentStatusMessage('${id}')">저장</button><button onclick="cancelStudentStatusEdit()">취소</button></div>`
+    : `<button class="mobileStatusPlain ${canEdit?'editable':''}" ${canEdit?`onclick="editStudentStatusMessage('${id}')" title="상태메시지 수정"`:""}><span>${escapeHtml(status)}</span>${canEdit?materialIcon('edit','msIcon statusEditIcon'):''}</button>`;
+  return `<section class="mobileHomeTopInfo mobileHomeTopInfoV110 mobileSnsTopInfo" aria-label="학생 프로필 요약">
+    <div class="mobileHomeTopStripV110">
+      <span class="mobileHomeMiniPillV110">${materialIcon('badge','metaIcon msIcon')}${escapeHtml(jobName)}</span>
+      <span class="mobileHomeMiniPillV110">${materialIcon('workspace_premium','metaIcon msIcon')}${rank}위</span>
+      <span class="mobileHomeMiniPillV110">${materialIcon('verified','metaIcon msIcon')}신용 ${credit.grade}</span>
+      <span class="mobileHomeMiniPillV110">${materialIcon('styler','metaIcon msIcon')}${av?.name||"기본 아바타"}</span>
+    </div>
+    <button class="mobileHomeZoomBtnV110" onclick="showAvatarPreviewLarge('${av?.id||"avatar_01"}')">${materialIcon('zoom_out_map','msIcon')} 크게보기</button>
+  </section>
+  <section class="mobileHomeAvatarShowcase mobileHomeAvatarShowcaseV109 mobileSnsHero" aria-label="아바타 홈">
+    <div class="mobileSnsNameBadge">${studentName(id)}</div>
+    <div class="mobileSnsJobBadge">${materialIcon('business_center','msIcon')} 직업: ${escapeHtml(jobName)}</div>
+    <div class="mobileSnsAvatarCircle"><div class="mobileHomeAvatarFigureV109">${staticAvatarHtml(id,false)}</div></div>
+    <div class="mobileSnsStatus">${statusHtml}</div>
+    <div class="mobileSnsCreditBadge">${materialIcon('verified_user','msIcon')} 신용도 ${credit.grade} · ${credit.score}점</div>
+    <div class="mobileSnsAssetBadge">${materialIcon('account_balance_wallet','msIcon')} 자산 ${won(totalAssetsOf(id))}</div>
+  </section>`;
+}
+function mobileEconomySummary(){
+  const todayKey=today();
+  const stats=currentEconomyStats(todayKey);
+  const rows=economyHistoryRows(null,false).filter(r=>r.day<todayKey).sort((a,b)=>a.day.localeCompare(b.day));
+  const prev=rows.length ? rows[rows.length-1] : null;
+  const diff=prev ? n(stats.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  return {
+    total: stats.totalHoldings,
+    diff,
+    rate,
+    tone: diff>0 ? 'up' : diff<0 ? 'down' : 'flat',
+    compareText: prev ? `${diff>0?'▲':diff<0?'▼':'•'} ${pct(Math.abs(rate))}` : '기록 없음',
+    compareSub: prev ? `${signedWon(diff)}` : '첫 기록'
+  };
+}
+function mobileHomeInfoCardsHtml(id, options={}){
+  const econ=mobileEconomySummary();
+  const credit=creditScoreInfo(id);
+  return `<section class="mobileHomeInfoGrid mobileHomeInfoGridV109 mobileHomeInfoGridV125" aria-label="핵심 정보">
+    <button class="mobileInfoCardV109 mobileInfoCardV125 ${econ.tone}" onclick="showTotalIncomeChart()">${infoCardIcon('account_balance_wallet')}<span>우리 반 총 열매</span><b>${won(econ.total)}</b><em>${econ.compareText} · 탭하여 차트 보기</em></button>
+    <button class="mobileInfoCardV109 mobileInfoCardV125 credit" onclick="showCreditHelp()">${infoCardIcon('credit_card')}<span>신용도</span><b>${credit.grade}</b><em>${credit.score}점</em></button>
+  </section>`;
 }
 function corporateHoldingSummaryHtml(id){
   const rows=studentCorporationShares(id);
@@ -1412,11 +2173,262 @@ function studentEconomyIndexHtml(){
     </div>
   </div>`;
 }
+function desktopTrendSvg(points,{color="#2f7df6",area="#dbeafe",height=250}={}){
+  const rows=points.filter(p=>Number.isFinite(n(p.value)));
+  if(!rows.length) return `<div class="desktopEmptyState">표시할 기록이 없습니다.</div>`;
+  const W=680,H=height,pad={l:42,r:28,t:24,b:42};
+  const vals=rows.map(p=>n(p.value));
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if(max===min){max+=1; min=Math.max(0,min-1);}
+  const extra=(max-min)*0.14 || 1;
+  min=Math.max(0,min-extra);
+  max+=extra;
+  const range=max-min;
+  const x=i=>pad.l+(W-pad.l-pad.r)*(rows.length===1?0.5:i/(rows.length-1));
+  const y=v=>pad.t+(H-pad.t-pad.b)*(1-(v-min)/range);
+  const grid=[0,1,2,3].map(i=>{
+    const yy=pad.t+(H-pad.t-pad.b)*i/3;
+    return `<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" class="desktopChartGridLine"></line>`;
+  }).join("");
+  const pointText=rows.map((p,i)=>`${x(i)},${y(n(p.value))}`).join(" ");
+  const areaText=`${pad.l},${H-pad.b} ${pointText} ${x(rows.length-1)},${H-pad.b}`;
+  const labels=rows.map((p,i)=>i%Math.ceil(rows.length/6)===0 || i===rows.length-1 ? `<text x="${x(i)}" y="${H-12}" text-anchor="middle" class="desktopChartLabel">${escapeHtml(p.label||"")}</text>` : "").join("");
+  const dots=rows.map((p,i)=>`<circle cx="${x(i)}" cy="${y(n(p.value))}" r="${i===rows.length-1?6:4}" class="desktopChartDot"></circle>`).join("");
+  const last=rows[rows.length-1];
+  return `<svg class="desktopLineChart" viewBox="0 0 ${W} ${H}" style="--chart-color:${color};--chart-area:${area}">
+    ${grid}<polygon points="${areaText}" class="desktopChartArea"></polygon>
+    <polyline points="${pointText}" class="desktopChartLine"></polyline>
+    ${dots}${labels}
+    <g class="desktopChartLastTag"><rect x="${Math.max(pad.l,Math.min(W-92,x(rows.length-1)-34))}" y="${Math.max(6,y(n(last.value))-38)}" width="78" height="28" rx="9"></rect><text x="${Math.max(pad.l,Math.min(W-92,x(rows.length-1)-34))+39}" y="${Math.max(6,y(n(last.value))-38)+18}" text-anchor="middle">${fmt(last.value)}</text></g>
+  </svg>`;
+}
+function desktopStudentHeroPanelHtml(id){
+  const s=student(id) || {};
+  const credit=creditScoreInfo(id);
+  const jobName=studentJobName(s) || "직업 없음";
+  const stats=studentNoticeStats(id);
+  return `<section class="desktopHeroCard">
+    <div class="desktopHeroAvatar">${staticAvatarHtml(id,false)}</div>
+    <div class="desktopHeroCopy">
+      <span class="desktopClassPill">${escapeHtml(studentClassLabel(s))}</span>
+      <h2>${escapeHtml(studentName(id))} 학생 👋</h2>
+      <p>${escapeHtml(studentStatusMessageOf(id))}</p>
+      <div class="desktopHeroStats">
+        <button onclick="setStudentTab('noticeboard')">${materialIcon("event_available","msIcon")}<span>알림</span><b>${stats.todayCount}개</b></button>
+        <button onclick="setStudentTab('visit')">${materialIcon("emoji_events","msIcon")}<span>순위</span><b>${rankOfStudent(id)}위</b></button>
+        <button onclick="showCreditHelp()">${materialIcon("verified","msIcon")}<span>신용</span><b>${credit.grade}</b></button>
+      </div>
+    </div>
+    <div class="desktopHeroScene" aria-hidden="true">
+      <span class="sceneCloud one"></span><span class="sceneCloud two"></span>
+      <span class="sceneSchool">${materialIcon("account_balance","msIcon")}</span>
+      <span class="sceneSprout">${materialIcon("local_florist","msIcon")}</span>
+    </div>
+  </section>`;
+}
+function desktopMetricCardHtml(card){
+  const tone=card.tone || "blue";
+  return `<button class="desktopMetricCard ${tone}" onclick="${card.onclick||""}">
+    <span class="desktopMetricIcon">${materialIcon(card.icon||"circle","msIcon")}</span>
+    <span class="desktopMetricLabel">${escapeHtml(card.label||"")}</span>
+    <b>${card.value}</b>
+    <em class="${card.deltaTone||""}">${card.sub||""}</em>
+  </button>`;
+}
+function desktopStudentMetricCardsHtml(id){
+  const deposit=n(obj(data.deposits)[id]);
+  const investment=savingsValueOf(id)+bondSumOf(id)+corporateEquityValueOf(id)+ticketValueOf(id);
+  const income=studentTodayIncome(id);
+  return [
+    {label:"총 자산",value:won(totalAssetsOf(id)),sub:studentAssetDeltaText(id),icon:"savings",tone:"violet",onclick:"setStudentTab('finance')"},
+    {label:"지갑",value:won(balanceOf(id)),sub:"바로 사용 가능",icon:"account_balance_wallet",tone:"yellow",onclick:"setStudentTab('finance')"},
+    {label:"입출금",value:signedWon(income),sub:"오늘 수입",icon:"sync_alt",tone:"sky",onclick:"setStudentTab('finance')",deltaTone:income>=0?"gain":"loss"},
+    {label:"예금",value:won(deposit),sub:"보유 중인 예금",icon:"account_balance",tone:"blue",onclick:"setStudentTab('finance')"},
+    {label:"투자",value:won(investment),sub:`평가 손익 ${studentAssetDeltaText(id)}`,icon:"trending_up",tone:"orange",onclick:"setStudentTab('products')"}
+  ].map(desktopMetricCardHtml).join("");
+}
+function desktopClassEconomyPanelHtml(){
+  const rows=economyHistoryRows(7);
+  const latest=rows[rows.length-1] || {totalHoldings:0};
+  const prev=rows[rows.length-2] || null;
+  const diff=prev ? n(latest.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  const chartRows=rows.map(r=>({label:(r.day||"").slice(5).replace("-","/"),value:n(r.totalHoldings)}));
+  return `<section class="desktopPanel desktopEconomyPanel">
+    <div class="desktopPanelHead"><div><h3>우리반 경제지수</h3><p>경제 활동을 종합해서 보는 전체 열매 흐름입니다.</p></div><button onclick="showTotalIncomeChart()">최근 7일 ${materialIcon("expand_more","msIcon")}</button></div>
+    <div class="desktopPanelKpi"><b>${fmt(latest.totalHoldings)}p</b><span class="${diff>=0?'gain':'loss'}">${signedWon(diff)} (${pct(rate)})</span></div>
+    ${desktopTrendSvg(chartRows,{color:"#2f7df6",area:"#dceaff"})}
+  </section>`;
+}
+function desktopAssetParts(id){
+  return [
+    {key:"cash",label:"지갑",value:balanceOf(id),color:"#20bf6b"},
+    {key:"deposit",label:"예금",value:n(obj(data.deposits)[id]),color:"#6aaeff"},
+    {key:"saving",label:"적금",value:savingsValueOf(id),color:"#8b7cf6"},
+    {key:"bond",label:"채권",value:bondSumOf(id),color:"#ffbf4d"},
+    {key:"ticket",label:"티켓",value:ticketValueOf(id),color:"#f06aa8"},
+    {key:"product",label:"상품",value:inventoryValueOf(id),color:"#36cfc9"},
+    {key:"corp",label:"투자",value:corporateEquityValueOf(id),color:"#ff8a3d"}
+  ].filter(p=>n(p.value)>0);
+}
+function desktopAssetCompositionPanelHtml(id){
+  const parts=desktopAssetParts(id);
+  const total=parts.reduce((sum,p)=>sum+n(p.value),0);
+  if(total<=0) return `<section class="desktopPanel desktopAssetPanel"><div class="desktopPanelHead"><div><h3>자산 구성</h3><p>아직 자산 기록이 없습니다.</p></div></div></section>`;
+  const r=44,c=2*Math.PI*r;
+  let offset=0;
+  const circles=parts.map(p=>{
+    const dash=Math.max(0.7,n(p.value)/total*c);
+    const gap=Math.max(0,c-dash);
+    const html=`<circle cx="54" cy="54" r="${r}" stroke="${p.color}" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"></circle>`;
+    offset+=dash;
+    return html;
+  }).join("");
+  return `<section class="desktopPanel desktopAssetPanel">
+    <div class="desktopPanelHead"><div><h3>자산 구성</h3><p>총자산을 지갑, 예금, 투자로 나눠 봅니다.</p></div><button onclick="setStudentTab('finance')">자세히 보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopAssetDonutWrap">
+      <div class="desktopAssetDonut"><svg viewBox="0 0 108 108"><circle cx="54" cy="54" r="${r}" stroke="#eef3fb" stroke-width="16" fill="none"></circle><g transform="rotate(-90 54 54)">${circles}</g></svg><div><span>총 자산</span><b>${won(total)}</b></div></div>
+      <div class="desktopAssetLegend">${parts.slice(0,5).map(p=>`<button onclick="setStudentTab('finance')"><i style="background:${p.color}"></i><span>${p.label}</span><b>${Math.round(n(p.value)/total*100)}%</b><em>${won(p.value)}</em></button>`).join("")}</div>
+    </div>
+  </section>`;
+}
+function desktopRecentTransactionsPanelHtml(id){
+  const rows=studentLedgerEntries(id,5);
+  return `<section class="desktopPanel desktopRecentPanel">
+    <div class="desktopPanelHead"><div><h3>최근 거래 내역</h3><p>가장 최근 입출금 기록입니다.</p></div><button onclick="setStudentTab('finance')">전체 보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopTxList">${rows.length?rows.map(e=>{
+      const positive=n(e.delta)>=0;
+      const when=e.ts ? seoulDateShortText(e.ts) : (e.day||"-");
+      return `<button class="desktopTxRow ${positive?'gain':'loss'}" onclick="setStudentTab('finance')"><span>${materialIcon(positive?"south_west":"north_east","msIcon")}</span><div><b>${escapeHtml(e.desc||e.type||"거래")}</b><em>${when}</em></div><strong>${positive?"+":"-"}${won(Math.abs(n(e.delta)))}</strong></button>`;
+    }).join(""):`<div class="desktopEmptyState">최근 거래가 없습니다.</div>`}</div>
+  </section>`;
+}
+function desktopTodoPanelHtml(id){
+  const notices=sortedNotices(noticeState.student)
+    .filter(nc=>!noticeDateValue(nc.dueDate) || noticeDateValue(nc.dueDate)>=today())
+    .slice(0,3);
+  const items=notices.length ? notices.map(nc=>{
+    const info=noticeTypeInfo(nc.type);
+    const done=!info.check || !!statusForNoticeStudent(nc.id,id)?.checked;
+    return {title:nc.title || info.name,done,meta:noticeDateValue(nc.dueDate)||"오늘"};
+  }) : [
+    {title:"경제 습관 기록하기",done:true,meta:"완료"},
+    {title:"자유시장 가격 살펴보기",done:false,meta:"오늘"},
+    {title:"알림장 확인하기",done:n(studentNoticeStats(id).todayCount)===0,meta:"매일"}
+  ];
+  return `<section class="desktopPanel desktopTodoPanel">
+    <div class="desktopPanelHead"><div><h3>알림장 / 오늘 할 일</h3><p>오늘 확인할 활동을 모았습니다.</p></div><button onclick="setStudentTab('noticeboard')">더보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopTodoList">${items.map(item=>`<button class="desktopTodoRow ${item.done?'done':''}" onclick="setStudentTab('noticeboard')"><span>${item.done?materialIcon("check","msIcon"):""}</span><b>${escapeHtml(item.title)}</b><em>${escapeHtml(item.meta)}</em></button>`).join("")}</div>
+  </section>`;
+}
+function desktopTicketPreviewPanelHtml(id){
+  const keys=Object.keys(ticketMeta).slice(0,3);
+  return `<section class="desktopPanel desktopTicketPanel">
+    <div class="desktopPanelHead"><div><h3>티켓 시장</h3><p>자주 쓰는 티켓을 빠르게 확인합니다.</p></div><button onclick="setStudentTab('products')">전체 보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopTicketPreviewGrid">${keys.map((k,i)=>{
+      const m=ticketMeta[k] || {};
+      return `<button class="desktopTicketPreviewCard tone${i+1}" onclick="setStudentTab('products')" style="--ticket-color:${m.color||"#6aaeff"}"><span>${materialIcon(i===0?"sports_esports":i===1?"redeem":"palette","msIcon")}</span><b>${escapeHtml(m.name||k)}</b><em>${escapeHtml(m.formula||"")}</em><strong>${won(ticketSell(k))}</strong></button>`;
+    }).join("")}</div>
+  </section>`;
+}
+function desktopRankPreviewPanelHtml(id){
+  const rows=assetRankingRows().slice(0,3);
+  return `<section class="desktopPanel desktopRankPanel">
+    <div class="desktopPanelHead"><div><h3>개인 순위</h3><p>우리반 자산 순위입니다.</p></div><button onclick="setStudentTab('visit')">전체 보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopRankList">${rows.map((r,i)=>`<button class="desktopRankRow ${r.id===id?'me':''}" onclick="openRankStudent('${r.id}')"><span class="rankMedal">${i+1}</span><span class="rankAvatar">${staticAvatarHtml(r.id,true)}</span><b>${escapeHtml(r.name)}</b><em>${escapeHtml(studentClassLabel(student(r.id)||{}))}</em><strong>${won(r.total)}</strong></button>`).join("") || `<div class="desktopEmptyState">순위 데이터가 없습니다.</div>`}</div>
+    <button class="desktopRankMore" onclick="setStudentTab('visit')">내 순위 더 보기 ${materialIcon("expand_more","msIcon")}</button>
+  </section>`;
+}
+function desktopReferenceHeroHtml(id){
+  const s=student(id) || {};
+  const selected=selectedAvatarItem(id);
+  const credit=creditScoreInfo(id);
+  return `<section class="desktopReferenceHero">
+    <div class="desktopReferenceAvatar">${staticAvatarHtml(id,false)}</div>
+    <div class="desktopReferenceCopy">
+      <span class="desktopClassPill">내 아바타</span>
+      <h2>${escapeHtml(studentName(id))} 학생</h2>
+      <p>현재 적용 아바타: ${escapeHtml(selected?.name || "기본 아바타")} <button class="inlineEditBtn" onclick="setStudentTab('cosmetic')" title="아바타 바꾸기">${materialIcon("edit","msIcon")}</button></p>
+      <div class="desktopReferenceMeta"><span>신용 ${credit.grade} · ${credit.score}점</span><em>친구와의 신뢰 지수</em></div>
+      <div class="desktopReferenceActions">
+        <button class="primary" onclick="setStudentTab('cosmetic')">${materialIcon("shopping_bag","msIcon")} 아바타 상점</button>
+        <button onclick="showAvatarPreviewLarge('${selected?.id || "avatar_01"}')">${materialIcon("open_in_full","msIcon")} 크게 보기</button>
+      </div>
+    </div>
+    <div class="desktopReferenceScene" aria-hidden="true">
+      <div class="sceneNote">오늘도<br>경제 습관<br>성장 중!</div>
+      <div class="sceneDesk">${materialIcon("potted_plant","msIcon")}<span>${materialIcon("paid","msIcon")}</span></div>
+      <div class="sceneBoard">${materialIcon("eco","msIcon")}</div>
+    </div>
+  </section>`;
+}
+function desktopEconomySummaryPanelHtml(){
+  const todayKey=today();
+  const stats=currentEconomyStats(todayKey);
+  const rows=economyHistoryRows(null,false).filter(r=>r.day<todayKey).sort((a,b)=>a.day.localeCompare(b.day));
+  const prev=rows.length ? rows[rows.length-1] : null;
+  const diff=prev ? n(stats.totalHoldings)-n(prev.totalHoldings) : 0;
+  const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
+  return `<section class="desktopPanel desktopReferenceEconomyPanel">
+    <div class="desktopPanelHead"><div><h3>우리 반 경제지수</h3><p>우리 반 전체가 가진 열매의 종합입니다.</p></div></div>
+    <div class="desktopReferenceKpiGrid">
+      <button onclick="showTotalIncomeChart()"><span>현재 전체 열매</span><b>${won(stats.totalHoldings)}</b><i>${materialIcon("savings","msIcon")}</i></button>
+      <button onclick="showTotalIncomeChart()"><span>최근 기록 대비</span><b class="${diff>=0?'gain':'loss'}">${pct(rate)}</b><em>${prev?.day || todayKey} 기준</em><i>${materialIcon("trending_up","msIcon")}</i></button>
+    </div>
+  </section>`;
+}
+function desktopNoticeOverviewPanelHtml(id){
+  const stats=studentNoticeStats(id);
+  return `<section class="desktopPanel desktopReferenceNoticePanel">
+    <div class="desktopPanelHead"><div><h3>알림장 요약</h3><p>오늘 확인할 알림과 선생님 답장입니다.</p></div><button onclick="setStudentTab('noticeboard')">알림장 열기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopNoticeKpiGrid">
+      <button class="blue" onclick="setStudentTab('noticeboard')"><span>오늘 알림</span><b>${stats.todayCount}개</b>${materialIcon("mail","msIcon")}</button>
+      <button class="orange" onclick="setStudentTab('noticeboard')"><span>미확인 숙제</span><b>${stats.uncheckedHomework}개</b>${materialIcon("edit_note","msIcon")}</button>
+      <button class="red" onclick="setStudentTab('noticeboard')"><span>읽지 않은 답장</span><b>${stats.unreadMessages}개</b>${materialIcon("forum","msIcon")}</button>
+    </div>
+  </section>`;
+}
+function desktopCreditPreviewPanelHtml(id){
+  const credit=creditScoreInfo(id);
+  const limit=loanLimitInfo(id);
+  return `<section class="desktopPanel desktopReferenceCreditPanel">
+    <div class="desktopPanelHead"><div><h3>신용카드 미리보기</h3><p>미래의 신용카드 시스템을 미리 확인할 수 있어요!</p></div><button onclick="showCreditHelp()">자세히 보기 ${materialIcon("arrow_forward","msIcon")}</button></div>
+    <div class="desktopCreditPreviewGrid">
+      <div class="desktopCreditCardArt"><span>교실카드</span>${materialIcon("contactless","msIcon")}<b>${credit.grade}</b><em>카드사: 교실카드</em></div>
+      <div class="desktopCreditStats">
+        <div><span>카드 한도</span><b>${won(limit.gross || balanceOf(id))}</b></div>
+        <div><span>사용 가능 금액</span><b>${won(limit.available || balanceOf(id))}</b></div>
+        <div><span>이번 달 사용액</span><b>${won(0)}</b><em>0%</em></div>
+        <div><span>결제 예정액</span><b>${won(0)}</b></div>
+        <div><span>청구일</span><b>매월 25일</b></div>
+        <div><span>카드사</span><b>교실카드</b></div>
+      </div>
+    </div>
+  </section>`;
+}
+function desktopStudentDashboardHtml(id){
+  return `<div class="desktopStudentDashboard desktopReferenceDashboard">
+    ${desktopReferenceHeroHtml(id)}
+    <div class="desktopReferenceSummaryGrid">
+      ${desktopEconomySummaryPanelHtml()}
+      ${desktopNoticeOverviewPanelHtml(id)}
+    </div>
+    <div class="desktopReferenceBottomGrid">
+      ${desktopAssetCompositionPanelHtml(id)}
+      ${desktopCreditPreviewPanelHtml(id)}
+    </div>
+  </div>`;
+}
 function studentDashboardHtml(id){
+  if(isMobileViewport()){
+    return mobileStudentHomeLiteHtml(id,"self");
+  }
+  return desktopStudentDashboardHtml(id);
   return `<div class="studentDashboard">
     ${studentDashboardHeroHtml(id)}
     ${studentEconomyIndexHtml()}
     ${fineNoticeHtml(id)}
+    ${studentNoticeSummaryHtml(id)}
 
     <div class="section dashboardAssetPiePanel">
       <div class="head"><div><h2>자산 구성</h2><div class="sub">현금, 예금, 채권, 티켓, 법인지분 비율을 원형 그래프로 봅니다.</div></div></div>
@@ -1480,11 +2492,11 @@ function assetStatusHtml(id){
     <div class="section assetHeroPanel">
       <div class="head"><div><h2>재산현황</h2><div class="sub">현금, 예금, 채권, 상품, 티켓 시세를 합산해 보여줍니다.</div></div><div class="assetRank">${rankOfStudent(id)}위</div></div>
       <div class="tabletStatGrid assetStatGrid">
-        <div class="tabletStat blue"><span>총자산</span><b>${won(totalAssetsOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
-        <div class="tabletStat green"><span>현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
-        <div class="tabletStat purple"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>승인 후 출금</em></div>
-        <div class="tabletStat orange"><span>채권</span><b>${won(bondSumOf(id))}</b><em>원금 기준</em></div>
-        <div class="tabletStat yellow"><span>티켓 시세 가치</span><b>${won(ticketValueOf(id))}</b><em>현재 판매가 기준</em></div>
+        <div class="tabletStat blue" data-stat-icon="pie_chart"><span>총자산</span><b>${won(totalAssetsOf(id))}</b><em>${studentAssetDeltaText(id)}</em></div>
+        <div class="tabletStat green" data-stat-icon="account_balance_wallet"><span>현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
+        <div class="tabletStat purple" data-stat-icon="savings"><span>예금</span><b>${won(obj(data.deposits)[id]||0)}</b><em>승인 후 출금</em></div>
+        <div class="tabletStat orange" data-stat-icon="paid"><span>채권</span><b>${won(bondSumOf(id))}</b><em>원금 기준</em></div>
+        <div class="tabletStat yellow" data-stat-icon="confirmation_number"><span>티켓 시세 가치</span><b>${won(ticketValueOf(id))}</b><em>현재 판매가 기준</em></div>
       </div>
     </div>
     <div class="assetLayoutGrid">
@@ -1577,7 +2589,7 @@ function productManufacturingCardsHtml(studentId){
     return `<div class="card"><div class="head"><div><h3>${item.name}</h3><div class="sub">${item.description}</div></div><span class="pill orange">완제품</span></div><p class="small">필요 재료: ${industryRecipeText(item)}</p><p><b>${won(item.manufactureCost)}</b> 제조비</p><p class="small">${industryCostHint(item)}</p>${reason?`<p class="small">${reason}</p>`:""}<button class="green" ${disabled?'disabled':''} onclick="manufactureIndustryProduct('${item.id}')">1개 제작</button></div>`;
   }).join("")}</div>`;
 }
-function industryHtml(studentId){
+function industryHtmlDesktop(studentId){
   return `<div class="section"><div class="head"><div><h2>생산·제작</h2><div class="sub">1차 산업 재료를 생산하거나, 재료를 조합해 완제품을 만듭니다.</div></div><div>${currentAssetPill(studentId)}</div></div>
     <div class="grid g3">
       <div class="card"><h3>내 산업 직업</h3><div class="value" style="font-size:26px">${industryRoleName(studentId)}</div><p class="small">기존 직업·임금과 별개로 생산·제작 전용 역할입니다.</p></div>
@@ -1588,6 +2600,22 @@ function industryHtml(studentId){
   <div class="section"><div class="head"><div><h2>산업 직업 선택</h2><div class="sub">직업 변경 시 산업 재고가 모두 초기화됩니다.</div></div></div>${industryRoleCardsHtml(studentId)}</div>
   <div class="section"><div class="head"><div><h2>재료 생산</h2><div class="sub">오늘 재료를 생산하면 완제품 제작은 내일까지 막힙니다.</div></div></div>${materialProductionCardsHtml(studentId)}</div>
   <div class="section"><div class="head"><div><h2>완제품 제작</h2><div class="sub">오늘 완제품을 제작하면 재료 생산은 내일까지 막힙니다.</div></div></div>${productManufacturingCardsHtml(studentId)}</div>`;
+}
+function industryHtml(studentId){
+  if(!isMobileViewport()) return industryHtmlDesktop(studentId);
+  const pages={
+    info:["내 직업 정보",`<div class="section"><div class="head"><div><h2>내 직업 정보</h2><div class="sub">직업, 오늘 활동, 보유 재료를 요약해서 봅니다.</div></div><div>${currentAssetPill(studentId)}</div></div><div class="grid g3"><div class="card"><h3>산업 직업</h3><div class="value" style="font-size:26px">${industryRoleName(studentId)}</div></div><div class="card"><h3>오늘 활동</h3><p>${industryActionText(studentId)}</p></div><div class="card"><h3>보유 현황</h3><p><b>재료</b></p>${industryInventorySummary(studentId,"material")}<p><b>제품</b></p>${industryInventorySummary(studentId,"product")}</div></div></div>`],
+    work:["업무 제출",studentWorkClaimsHtml(studentId)],
+    income:["임금 기록",studentDailyIncomeHtml(studentId)],
+    role:["직업별 기능",roleWorkHtml(studentId)+industryHtmlDesktop(studentId)]
+  };
+  if(activeMobilePage && pages[activeMobilePage]) return `${mobileSubPageHeader(pages[activeMobilePage][0])}${pages[activeMobilePage][1]}`;
+  return `<div class="section"><div class="head"><div><h2>직업</h2><div class="sub">필요한 직업 기능만 골라 이동합니다.</div></div></div>${mobileMenuGrid([
+    {id:"info",icon:"⚙",title:"내 직업 정보",description:"직업과 오늘 활동 요약",badge:industryRoleName(studentId)},
+    {id:"work",icon:"✓",title:"업무 제출",description:"검사가 필요한 업무 신청"},
+    {id:"income",icon:"₩",title:"임금 기록",description:"받은 임금과 수입 확인"},
+    {id:"role",icon:"▣",title:"직업별 기능",description:"경찰, 국세청, 은행장 등"}
+  ])}</div>`;
 }
 function marketBoostCount(studentId,date=today()){return n(obj(obj(data.marketBoosts)[date])[studentId])}
 function marketBoostBadge(studentId){const c=marketBoostCount(studentId); return c>0?`<span class="pill orange">상단 표시 ${c}장</span>`:""}
@@ -1775,8 +2803,8 @@ function marketSellerPopupHtml(sellerId,viewerId){
 }
 function marketFilterHtml(){
   const cats=["전체","자유거래","서비스","직업","티켓","농산물","광산물","화석연료","완제품","기타물품"];
-  return `<div class="marketFilterBar tabletMarketFilter">
-    <div class="marketCategoryPills">${cats.map(c=>`<button class="${marketCategory===c?'active':''}" onclick="setMarketCategory('${c}')">${c==="기타물품"?"기타":c}</button>`).join("")}</div>
+  return `<div class="marketFilterBar tabletMarketFilter marketFilterSelectBar">
+    <div class="field compactField"><label>카테고리</label><select id="marketCategorySelect" onchange="setMarketCategory(this.value)">${cats.map(c=>`<option value="${c}" ${marketCategory===c?"selected":""}>${c==="기타물품"?"기타":c}</option>`).join("")}</select></div>
     <div class="field compactField searchField"><label>검색</label><input id="marketSearchInput" value="${marketSearch}" placeholder="제목, 물품, 판매자, 설명 검색" oninput="setMarketSearch(this.value)"></div>
     <div class="field compactField"><label>정렬</label><select id="marketSortSelect" onchange="setMarketSort(this.value)">
       <option value="boost" ${marketSort==="boost"?"selected":""}>상단 표시순</option>
@@ -1786,7 +2814,86 @@ function marketFilterHtml(){
     </select></div>
   </div>`;
 }
-function marketHtml(id){
+function marketRegisterLauncherHtml(id){
+  return `<div class="card marketRegisterLauncher unifiedMarketRegisterLauncher">
+    <div class="marketRegisterLauncherHead"><div><h3>물품 등록</h3><div class="sub">티켓, 자유 물품, 재료, 완제품, 직업 판매를 한 화면에서 선택해 등록합니다.</div></div><span class="pill green">내 판매 ${marketListings().filter(l=>l.sellerId===id).length}개</span></div>
+    <button class="marketRegisterUnifiedBtn" onclick="openMarketRegister()"><span>＋</span><b>물품 등록하기</b><small>종류 선택 후 팝업에서 한 번에 등록</small></button>
+  </div>`;
+}
+function marketRegisterTypeOptions(selected="custom"){
+  const rows=[
+    ["custom","자유 물품"],
+    ["ticket","티켓"],
+    ["material","재료"],
+    ["product","완제품"],
+    ["job","직업"]
+  ];
+  return rows.map(([value,label])=>`<option value="${value}" ${value===selected?"selected":""}>${label}</option>`).join("");
+}
+function marketRegisterDialogHtml(type="custom",id){
+  return `<div class="marketRegisterPopupBody unifiedMarketRegisterPopup">
+    <div class="card unifiedRegisterCard">
+      <div class="field"><label>등록할 물품 종류</label><select id="marketRegisterType" onchange="setMarketRegisterType(this.value)">${marketRegisterTypeOptions(type)}</select></div>
+      <div class="marketRegisterFormBlock ${type==="ticket"?"active":""}" data-market-register="ticket">
+        <h3>티켓 판매</h3><div class="sub">보유한 티켓 1장을 시장에 올립니다.</div>
+        <div class="field"><label>티켓</label><select id="marketTicketId">${ticketOptionsOwned(id)}</select></div>
+        <div class="field"><label>판매가</label><input id="marketTicketPrice" type="number" value="${ticketSell('classClean')}"></div>
+      </div>
+      <div class="marketRegisterFormBlock ${type==="custom"?"active":""}" data-market-register="custom">
+        <h3>자유 물품</h3><div class="sub">직접 이름과 설명을 적어서 자유거래 상품을 등록합니다.</div>
+        <div class="field"><label>카테고리</label><select id="marketCustomCategory">${marketCategoryOptions("기타물품",false)}</select></div>
+        <div class="field"><label>이름</label><input id="marketCustomName" placeholder="예: 그림, 심부름권, 뽑기권"></div>
+        <div class="field"><label>가격</label><input id="marketCustomPrice" type="number" value="100"></div>
+        <div class="field"><label>설명</label><input id="marketCustomNote" placeholder="선택"></div>
+      </div>
+      <div class="marketRegisterFormBlock ${type==="material"?"active":""}" data-market-register="material">
+        <h3>재료 판매</h3><div class="sub">보유한 산업 재료를 수량과 가격으로 등록합니다.</div>
+        <div class="field"><label>재료</label><select id="marketIndustryMaterialId">${industryOptionsOwned(id,"material")}</select></div>
+        <div class="field"><label>수량</label><input id="marketIndustryMaterialQty" type="number" value="1"></div>
+        <div class="field"><label>판매가</label><input id="marketIndustryMaterialPrice" type="number" value="50"></div>
+        <div class="field"><label>설명</label><input id="marketIndustryMaterialNote" placeholder="선택"></div>
+      </div>
+      <div class="marketRegisterFormBlock ${type==="product"?"active":""}" data-market-register="product">
+        <h3>완제품 판매</h3><div class="sub">보유한 완제품을 수량과 가격으로 등록합니다.</div>
+        <div class="field"><label>완제품</label><select id="marketIndustryProductId">${industryOptionsOwned(id,"product")}</select></div>
+        <div class="field"><label>수량</label><input id="marketIndustryProductQty" type="number" value="1"></div>
+        <div class="field"><label>판매가</label><input id="marketIndustryProductPrice" type="number" value="100"></div>
+        <div class="field"><label>설명</label><input id="marketIndustryProductNote" placeholder="선택"></div>
+      </div>
+      <div class="marketRegisterFormBlock ${type==="job"?"active":""}" data-market-register="job">
+        <h3>직업 판매</h3><div class="sub">등록하면 판매가 끝날 때까지 내 직업에서 잠시 빠집니다.</div>
+        <div class="field"><label>직업</label><select id="marketJobId">${jobOptionsOwned(id)}</select></div>
+        <div class="field"><label>판매가</label><input id="marketJobPrice" type="number" value="100"></div>
+        <div class="pendingHint">등록하면 판매 완료 또는 취소 전까지 내 직업에서 빠집니다.</div>
+      </div>
+      <button class="primary unifiedRegisterSubmit" onclick="submitUnifiedMarketListing()">선택한 물품 등록</button>
+    </div>
+  </div>`;
+}
+window.openMarketRegister = function(type="custom"){
+  const id=selectedStudent;
+  if(!id) return toast("학생을 먼저 선택하세요.");
+  const title=document.getElementById("detailTitle");
+  const sub=document.getElementById("detailSub");
+  const body=document.getElementById("detailBody");
+  if(title) title.textContent="물품 등록";
+  if(sub) sub.textContent=`${studentName(id)} · 등록할 종류를 고르고 정보를 입력하세요.`;
+  if(body) body.innerHTML=marketRegisterDialogHtml(type,id);
+  document.getElementById("detailModal")?.classList.remove("hidden");
+}
+window.setMarketRegisterType = function(type){
+  const blocks=document.querySelectorAll("[data-market-register]");
+  blocks.forEach(el=>el.classList.toggle("active",el.dataset.marketRegister===type));
+}
+window.submitUnifiedMarketListing = async function(){
+  const type=document.getElementById("marketRegisterType")?.value || "custom";
+  if(type==="ticket") return createTicketListing();
+  if(type==="material") return createIndustryMaterialListing();
+  if(type==="product") return createIndustryProductListing();
+  if(type==="job") return createJobListing();
+  return createCustomListing();
+}
+function marketHtmlDesktop(id){
   const open=marketListings().filter(marketListingMatches);
   const mine=open.filter(l=>l.sellerId===id);
   const others=open;
@@ -1796,45 +2903,7 @@ function marketHtml(id){
       <div><h3>상단 표시권 사용</h3><div class="sub">보유 ${n(obj(obj(data.ticketHoldings)[id]).topDisplay)}장 · 오늘 사용 ${marketBoostCount(id)}장. 사용한 매수만큼 첫 화면 판매자 정렬이 앞으로 올라갑니다.</div></div>
       <div class="toolbar"><input id="marketBoostUseQty" type="number" value="1" min="1" style="max-width:90px"><button class="orange" onclick="useTopDisplayPass()">사용하기</button></div>
     </div>
-    <div class="marketRegisterGrid">
-      <div class="card">
-        <h3>보유 티켓 판매 등록</h3>
-        <div class="field"><label>티켓</label><select id="marketTicketId">${ticketOptionsOwned(id)}</select></div>
-        <div class="field"><label>판매가</label><input id="marketTicketPrice" type="number" value="${ticketSell('classClean')}"></div>
-        <button class="orange" onclick="createTicketListing()">티켓 판매 등록</button>
-      </div>
-      <div class="card">
-        <h3>자유 물품 판매 등록</h3>
-        <div class="field"><label>카테고리</label><select id="marketCustomCategory">${marketCategoryOptions("기타물품",false)}</select></div>
-        <div class="field"><label>이름</label><input id="marketCustomName" placeholder="예: 그림, 심부름권, 뽑기권"></div>
-        <div class="field"><label>가격</label><input id="marketCustomPrice" type="number" value="100"></div>
-        <div class="field"><label>설명</label><input id="marketCustomNote" placeholder="선택"></div>
-        <button class="primary" onclick="createCustomListing()">자유 거래 등록</button>
-      </div>
-      <div class="card">
-        <h3>재료 판매 등록</h3>
-        <div class="field"><label>재료</label><select id="marketIndustryMaterialId">${industryOptionsOwned(id,"material")}</select></div>
-        <div class="field"><label>수량</label><input id="marketIndustryMaterialQty" type="number" value="1"></div>
-        <div class="field"><label>판매가</label><input id="marketIndustryMaterialPrice" type="number" value="50"></div>
-        <div class="field"><label>설명</label><input id="marketIndustryMaterialNote" placeholder="선택"></div>
-        <button class="green" onclick="createIndustryMaterialListing()">재료 판매 등록</button>
-      </div>
-      <div class="card">
-        <h3>완제품 판매 등록</h3>
-        <div class="field"><label>완제품</label><select id="marketIndustryProductId">${industryOptionsOwned(id,"product")}</select></div>
-        <div class="field"><label>수량</label><input id="marketIndustryProductQty" type="number" value="1"></div>
-        <div class="field"><label>판매가</label><input id="marketIndustryProductPrice" type="number" value="100"></div>
-        <div class="field"><label>설명</label><input id="marketIndustryProductNote" placeholder="선택"></div>
-        <button class="orange" onclick="createIndustryProductListing()">완제품 판매 등록</button>
-      </div>
-      <div class="card">
-        <h3>직업 판매 등록</h3>
-        <div class="field"><label>직업</label><select id="marketJobId">${jobOptionsOwned(id)}</select></div>
-        <div class="field"><label>판매가</label><input id="marketJobPrice" type="number" value="100"></div>
-        <button class="green" onclick="createJobListing()">직업 판매 등록</button>
-        <div class="pendingHint">등록하면 판매가 끝날 때까지 내 직업에서 잠시 빠집니다.</div>
-      </div>
-    </div>
+    ${marketRegisterLauncherHtml(id)}
   </div>
   <div class="section">
     <div class="head"><div><h2>판매 중인 물건</h2><div class="sub">전체 판매글을 확인합니다. 내 물품도 시장 몇 번째에 등록됐는지 함께 볼 수 있습니다.</div></div></div>
@@ -1854,6 +2923,24 @@ function marketHtml(id){
   </div>`;
 }
 
+function marketHtml(id){
+  if(!isMobileViewport()) return marketHtmlDesktop(id);
+  const pages={
+    tickets:["티켓 시장",ticketMarketStudentHtml(id)],
+    free:["자유시장",marketHtmlDesktop(id)],
+    snacks:["과자 시장",productShopHtml(id)],
+    history:["내 구매/판매 내역",`<div class="section"><div class="head"><div><h2>내 구매/판매 내역</h2><div class="sub">최근 거래를 카드형 목록으로 확인합니다.</div></div></div>${studentRecentLedgerHtml(id,40)}</div>`]
+  };
+  if(activeMobilePage && pages[activeMobilePage]) return `${mobileSubPageHeader(pages[activeMobilePage][0])}${pages[activeMobilePage][1]}`;
+  const open=marketListings();
+  const mine=open.filter(l=>l.sellerId===id).length;
+  return `<div class="section"><div class="head"><div><h2>시장</h2><div class="sub">티켓, 자유시장, 과자 시장을 나눠서 봅니다.</div></div><div>${currentAssetPill(id)}</div></div>${mobileMenuGrid([
+    {id:"tickets",icon:"▤",title:"티켓 시장",description:"티켓 구매, 판매, 사용 신청",badge:`보유 ${studentTicketCount(id)}`},
+    {id:"free",icon:"▦",title:"자유시장",description:"학생끼리 물건을 사고팔기",badge:`내 판매 ${mine}`},
+    {id:"snacks",icon:"□",title:"과자 시장",description:"상품 가격표와 구매 요청"},
+    {id:"history",icon:"≡",title:"내 구매/판매 내역",description:"최근 거래와 요청 확인"}
+  ])}</div>`;
+}
 function studentSellerOptions(viewerId){
   const rows=students().filter(s=>s.id!==viewerId);
   if(!rows.length) return `<option value="">판매자 없음</option>`;
@@ -1901,18 +2988,18 @@ function ticketMarketStudentHtml(id){
     <div class="section">
       <div class="head"><div><h2>티켓시장</h2><div class="sub">구매, 판매, 사용 신청을 티켓별로 처리합니다.</div></div><div>${currentAssetPill(id)}</div></div>
       <div class="tabletStatGrid">
-        <div class="tabletStat blue"><span>보유 열매</span><b>${won(balanceOf(id))}</b><em>구매 가능 금액</em></div>
-        <div class="tabletStat green"><span>전체 티켓 재고</span><b>${totalTicketStock()}장</b><em>교사 설정 수량 기준</em></div>
-        <div class="tabletStat orange"><span>내 티켓 보유</span><b>${studentTicketCount(id)}장</b><em>여러 장 보유 가능</em></div>
-        <div class="tabletStat purple"><span>오늘 기준 가격</span><b>${won(basePrice("classClean"))}</b><em>전체 청소 면제권</em></div>
+        <div class="tabletStat blue" data-stat-icon="account_balance_wallet"><span>보유 열매</span><b>${won(balanceOf(id))}</b><em>구매 가능 금액</em></div>
+        <div class="tabletStat green" data-stat-icon="confirmation_number"><span>전체 티켓 재고</span><b>${totalTicketStock()}장</b><em>교사 설정 수량 기준</em></div>
+        <div class="tabletStat orange" data-stat-icon="local_activity"><span>내 티켓 보유</span><b>${studentTicketCount(id)}장</b><em>여러 장 보유 가능</em></div>
+        <div class="tabletStat purple" data-stat-icon="sell"><span>오늘 기준 가격</span><b>${won(basePrice("classClean"))}</b><em>전체 청소 면제권</em></div>
       </div>
     </div>
     <div class="section topDisplayNotice">
       <div class="head"><div><h2>상단 표시권</h2><div class="sub">시장 판매자를 앞쪽에 보이게 하는 티켓입니다.</div></div><span class="pill orange">가격 5열매 · 하루 재고 20장</span></div>
       <div class="topDisplayGrid">
-        <div class="card"><b>내 보유량</b><div class="value">${n(hold.topDisplay)}장</div></div>
-        <div class="card"><b>오늘 사용량</b><div class="value">${marketBoostCount(id)}장</div></div>
-        <div class="card"><b>사용 효과</b><p class="small">사용한 장수만큼 시장 첫 화면에서 내 판매자 카드가 우선 표시됩니다.</p></div>
+        <div class="card topDisplayCard" data-card-icon="inventory_2"><b>내 보유량</b><div class="value">${n(hold.topDisplay)}장</div></div>
+        <div class="card topDisplayCard" data-card-icon="today"><b>오늘 사용량</b><div class="value">${marketBoostCount(id)}장</div></div>
+        <div class="card topDisplayCard" data-card-icon="rocket_launch"><b>사용 효과</b><p class="small">사용한 장수만큼 시장 첫 화면에서 내 판매자 카드가 우선 표시됩니다.</p></div>
       </div>
     </div>
     <div class="section">
@@ -1985,6 +3072,22 @@ function activeBondRowsHtml(id){
 }
 
 function savingsRate(){return n(data.settings.depositRate)}
+function depositInterestRateFromInput(){
+  const input=document.getElementById("depositRate");
+  const raw=input ? n(input.value)/100 : savingsRate();
+  return Math.max(0,raw);
+}
+function depositInterestPeriodsFromInput(){
+  const input=document.getElementById("depositInterestPeriods");
+  return Math.max(1,Math.floor(input ? n(input.value) : 1));
+}
+function depositInterestRows(rate=depositInterestRateFromInput(),periods=depositInterestPeriodsFromInput()){
+  return students().map(s=>{
+    const principal=money(n(obj(data.deposits)[s.id]));
+    const interest=money(principal*(Math.pow(1+rate,periods)-1));
+    return {student:s,principal,interest,nextBalance:money(principal+interest)};
+  }).filter(row=>row.principal>0 && row.interest>0);
+}
 function dateOnly(d=new Date()){return localDateString(d)}
 function dateParts(iso){
   const [y,m,d]=String(iso||today()).slice(0,10).split("-").map(x=>Number(x));
@@ -2032,6 +3135,43 @@ function savingsRowsHtml(id){
     const installment=savingInstallment(s);
     const next=savingNextPayDate(s);
     return `<tr><td>${s.start||"-"}</td><td>${s.mature||"-"}</td><td class="num">${won(installment)}</td><td class="num">${won(s.totalPaid||0)}</td><td class="num"><b>${won(projected.balance)}</b><br><span class="small">매주 복리 ${n(s.rate)||Math.round(savingsRate()*100)}%</span></td><td>${next}${canPaySaving(s)?`<br><span class="pill green">납입 가능</span>`:""}</td><td><div class="toolbar"><button class="blue" onclick="paySavingInstallment('${s.id}')" ${canPaySaving(s)?"":"disabled"}>납입</button>${due?`<button class="green" onclick="matureSaving('${s.id}')">만기 수령</button>`:""}<button class="danger" onclick="cancelSaving('${s.id}')">중도해지</button></div></td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function depositHoldingRowsHtml(){
+  const rows=students().map(s=>{
+    const balance=money(n(obj(data.deposits)[s.id]));
+    const rate=savingsRate();
+    return {student:s,balance,interest:money(balance*rate)};
+  }).filter(row=>row.balance>0).sort((a,b)=>b.balance-a.balance);
+  if(!rows.length) return `<p class="small">현재 예금에 가입한 학생이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>학생</th><th>상품</th><th>만기</th><th class="num">예금 잔액</th><th class="num">1회 예상 이자</th><th>처리</th></tr></thead><tbody>${rows.map(row=>`<tr>
+    <td><b>${row.student.name}</b></td>
+    <td>예금통장</td>
+    <td><span class="pill blue">수시 입출금</span></td>
+    <td class="num"><b>${won(row.balance)}</b></td>
+    <td class="num">${won(row.interest)}</td>
+    <td><button class="purple" onclick="payDepositInterestForStudent('${row.student.id}')">이자 지급</button></td>
+  </tr>`).join("")}</tbody></table></div>`;
+}
+function savingsHoldingRowsHtml(){
+  const rows=arr(data.savings).filter(s=>s && s.status==="active").sort((a,b)=>(a.mature||"").localeCompare(b.mature||""));
+  if(!rows.length) return `<p class="small">현재 가입 중인 적금 상품이 없습니다.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>학생</th><th>상품</th><th>가입일</th><th>만기일</th><th class="num">납입원금</th><th class="num">현재 평가액</th><th class="num">발생 이자</th><th>상태</th><th>처리</th></tr></thead><tbody>${rows.map(s=>{
+    const projected=savingProjection(s);
+    const current=money(s.balance ?? s.totalPaid ?? 0);
+    const interest=money(Math.max(0,projected.balance-current));
+    const due=new Date((s.mature||"")+"T00:00:00")<=new Date();
+    return `<tr>
+      <td><b>${studentName(s.owner)}</b></td>
+      <td>적금통장<br><span class="small">${SAVING_PAYMENT_INTERVAL_DAYS}일마다 ${won(savingInstallment(s))}</span></td>
+      <td>${s.start||"-"}</td>
+      <td>${s.mature||"-"}</td>
+      <td class="num">${won(s.totalPaid||0)}</td>
+      <td class="num"><b>${won(projected.balance)}</b><br><span class="small">매주 복리 ${n(s.rate)||Math.round(savingsRate()*100)}%</span></td>
+      <td class="num">${won(interest)}${projected.weeks>0?`<br><span class="small">${projected.weeks}회분</span>`:""}</td>
+      <td>${due?`<span class="pill green">만기</span>`:`<span class="pill orange">진행 중</span>`}</td>
+      <td><div class="toolbar"><button class="purple" onclick="paySavingInterest('${s.id}')">이자 지급</button>${due?`<button class="green" onclick="matureSaving('${s.id}')">만기 지급</button>`:""}<button class="blue" onclick="paySavingInstallment('${s.id}')" ${canPaySaving(s)?"":"disabled"}>납입</button></div></td>
+    </tr>`;
   }).join("")}</tbody></table></div>`;
 }
 function activeLoans(id){return arr(data.loans).filter(l=>l.owner===id && l.status==="active").sort((a,b)=>(a.due||"").localeCompare(b.due||""))}
@@ -2085,11 +3225,11 @@ function bondMarketStudentHtml(id){
 }
 function bankbookTypes(){
   return [
-    {id:"cash",name:"입출금통장",tone:"green",icon:"🌱",desc:"일상적인 거래와 자금 관리를 위한 통장입니다.",badge:"사용 가능"},
-    {id:"deposit",name:"예금통장",tone:"blue",icon:"🌳",desc:"목돈을 안전하게 보관하고 이자를 받는 통장입니다.",badge:`이자율 ${Math.round(n(data.settings.depositRate)*100)}%`},
-    {id:"saving",name:"적금통장",tone:"orange",icon:"💰",desc:"정기적으로 저축하여 목돈을 마련하는 통장입니다.",badge:"매주 복리"},
-    {id:"investment",name:"투자통장",tone:"purple",icon:"📊",desc:"티켓, 채권 등 투자 자산을 확인하는 통장입니다.",badge:"투자 가능"},
-    {id:"loan",name:"대출통장",tone:"red",icon:"🏠",desc:"대출을 관리하고 상환하는 통장입니다.",badge:"상환 관리"}
+    {id:"cash",name:"입출금통장",tone:"green",icon:"account_balance_wallet",desc:"일상적인 거래와 자금 관리를 위한 통장입니다.",badge:"사용 가능"},
+    {id:"deposit",name:"예금통장",tone:"blue",icon:"savings",desc:"목돈을 안전하게 보관하고 이자를 받는 통장입니다.",badge:`이자율 ${Math.round(n(data.settings.depositRate)*100)}%`},
+    {id:"saving",name:"적금통장",tone:"orange",icon:"account_balance",desc:"정기적으로 저축하여 목돈을 마련하는 통장입니다.",badge:"매주 복리"},
+    {id:"investment",name:"투자통장",tone:"purple",icon:"query_stats",desc:"티켓, 채권 등 투자 자산을 확인하는 통장입니다.",badge:"투자 가능"},
+    {id:"loan",name:"대출통장",tone:"red",icon:"credit_score",desc:"대출을 관리하고 상환하는 통장입니다.",badge:"상환 관리"}
   ];
 }
 function bankbookById(id){return bankbookTypes().find(b=>b.id===id) || bankbookTypes()[0]}
@@ -2109,15 +3249,19 @@ function bankSummaryInfo(id){
 function bankSummaryCardsHtml(id){
   const x=bankSummaryInfo(id);
   return `<div class="tabletStatGrid bankSummaryGrid">
-    <div class="tabletStat blue"><span>사용 가능 금액</span><b>${won(x.cash)}</b><em>바로 사용 가능</em></div>
-    <div class="tabletStat green"><span>총자산</span><b>${won(x.totalAssets)}</b><em>예금 + 투자</em></div>
-    <div class="tabletStat orange"><span>총부채</span><b>${won(x.totalDebt)}</b><em>대출 + 미납금</em></div>
-    <div class="tabletStat purple"><span>순자산</span><b>${won(x.net)}</b><em>총자산 - 총부채</em></div>
+    <div class="tabletStat blue" data-stat-icon="payments"><span>사용 가능 금액</span><b>${won(x.cash)}</b><em>바로 사용 가능</em></div>
+    <div class="tabletStat green" data-stat-icon="account_balance_wallet"><span>총자산</span><b>${won(x.totalAssets)}</b><em>예금 + 투자</em></div>
+    <div class="tabletStat orange" data-stat-icon="credit_card_off"><span>총부채</span><b>${won(x.totalDebt)}</b><em>대출 + 미납금</em></div>
+    <div class="tabletStat purple" data-stat-icon="trending_up"><span>순자산</span><b>${won(x.net)}</b><em>총자산 - 총부채</em></div>
   </div>`;
+}
+function bankbookIconHtml(icon, extraClass=""){
+  const normalized=normalizedIconName(icon);
+  return /^[a-z0-9_]+$/i.test(normalized) ? materialIcon(normalized, `${extraClass} msIcon`.trim()) : `<span class="${extraClass}">${normalized}</span>`;
 }
 function bankbookCoverHtml(book,selected=false){
   return `<button class="bankbookRow ${selected?"selected":""}" onclick="setBankbook('${book.id}')">
-    <span class="bankbookCover bankbook-${book.tone}"><b>${book.name}</b><em>CLASS BANK</em><i>${book.icon}</i></span>
+    <span class="bankbookCover bankbook-${book.tone}"><b>${book.name}</b><em>CLASS BANK</em><i>${bankbookIconHtml(book.icon,"bankbookCoverIcon")}</i></span>
     <span class="bankbookRowText"><strong>${book.name}</strong><small>${book.desc}</small><span class="pill ${book.tone==="red"?"orange":book.tone}">${book.badge}</span></span>
     <span class="bankbookCheck" aria-hidden="true"><span>${selected?"✓":"›"}</span></span>
   </button>`;
@@ -2129,12 +3273,12 @@ function bankbookSelectHtml(){
   </div>`;
 }
 function bankbookTabsHtml(active){
-  return `<div class="bankbookTabs">${bankbookTypes().map(b=>`<button class="bankbookTab bankbookTab-${b.tone} ${b.id===active?"active":""}" onclick="setBankbook('${b.id}')"><span class="bankbookTabIcon">${b.icon}</span><span>${b.name}</span></button>`).join("")}</div>`;
+  return `<div class="bankbookTabs">${bankbookTypes().map(b=>`<button class="bankbookTab bankbookTab-${b.tone} ${b.id===active?"active":""}" onclick="setBankbook('${b.id}')"><span class="bankbookTabIcon">${bankbookIconHtml(b.icon)}</span><span>${b.name}</span></button>`).join("")}</div>`;
 }
 function bankRequestHistoryHtml(id,types){
   const list=arr(data.requests).filter(r=>r.studentId===id && types.includes(r.type)).sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
   if(!list.length) return `<p class="small">진행 중인 신청이 없습니다.</p>`;
-  return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${new Date(r.ts).toLocaleString("ko-KR")}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${seoulDateTimeText(r.ts)}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 function studentLedgerEntries(id,limit=20){
   const rows=[...(obj(derived.ledgerByAccount)[id] || [])]
@@ -2157,7 +3301,7 @@ function allStudentLedgerHtml(limit=80){
     .slice(0,limit);
   if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
   return `<div class="scroll"><table><thead><tr><th>시간</th><th>내용</th><th>학생</th><th class="num">금액</th></tr></thead><tbody>${rows.map(e=>{
-    const when=e.ts ? new Date(e.ts).toLocaleString("ko-KR") : (e.day||"-");
+    const when=e.ts ? seoulDateTimeText(e.ts) : (e.day||"-");
     const names=e.studentLines.map(l=>studentName(l.account)).join(" / ");
     const amount=e.studentLines.reduce((sum,l)=>sum+n(l.delta),0);
     return `<tr><td>${when}</td><td>${e.desc||e.type||"-"}</td><td>${names}</td><td class="num ${amount>=0?"ledgerPlus":"ledgerMinus"}">${amount>=0?"+":""}${won(amount)}</td></tr>`;
@@ -2167,7 +3311,7 @@ function studentRecentLedgerHtml(id,limit=20,showTax=false){
   const rows=studentLedgerEntries(id,limit);
   if(!rows.length) return `<p class="small">최근 거래 내역이 없습니다.</p>`;
   return `<div class="scroll"><table><thead><tr><th>시간</th><th>내용</th><th class="num">금액</th>${showTax?`<th>세금</th>`:""}</tr></thead><tbody>${rows.map(e=>{
-    const when=e.ts ? new Date(e.ts).toLocaleString("ko-KR") : (e.day||"-");
+    const when=e.ts ? seoulDateTimeText(e.ts) : (e.day||"-");
     const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
     return `<tr><td>${when}</td><td>${e.desc||e.type||"-"}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td>${showTax?`<td>${studentTaxPaidControl(e,id)}</td>`:""}</tr>`;
   }).join("")}</tbody></table></div>`;
@@ -2207,8 +3351,57 @@ function bankbookLedgerTableHtml(id){
     </div>
     <div class="bankbookLedger"><table><thead><tr><th>날짜</th><th>내용</th><th class="num">금액</th><th>세금</th></tr></thead><tbody>${pageRows.map(e=>{
       const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
-      const day=e.ts ? new Date(e.ts).toLocaleDateString("ko-KR",{month:"2-digit",day:"2-digit"}).replace(/\.\s?/g,".").replace(/\.$/,"") : "-";
+      const day=e.ts ? seoulDateShortText(e.ts) : "-";
       return `<tr><td>${day}</td><td>${e.desc||e.type||"-"}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td><td>${studentTaxPaidControl(e,id)}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    <div class="bankbookLedgerPager">
+      <button class="bankPagerBtn" onclick="changeBankLedgerPage(-1)" ${bankLedgerPage<=1?"disabled":""}>이전</button>
+      <span>${bankLedgerPage} / ${totalPages}</span>
+      <button class="bankPagerBtn" onclick="changeBankLedgerPage(1)" ${bankLedgerPage>=totalPages?"disabled":""}>다음</button>
+    </div>`;
+}
+function depositLedgerEntries(id,limit=9999){
+  const rows=[];
+  arr(data.ledger).forEach(e=>{
+    const meta=obj(e.meta);
+    const delta=n(meta.depositDelta);
+    if(delta!==0 && arr(e.lines).some(l=>l.account===id)){
+      rows.push({...e,delta:money(delta),depositKind:delta>0?"입금":"출금"});
+    }
+    const interest=obj(meta.deposits)[id];
+    if(interest){
+      rows.push({
+        ...e,
+        delta:money(interest.interest),
+        depositKind:"이자",
+        desc:`${e.desc||"예금 이자"} · 잔액 ${won(interest.balance)}`
+      });
+    }
+  });
+  rows.sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
+  return limit ? rows.slice(0,limit) : rows;
+}
+function depositLedgerTableHtml(id){
+  const rows=depositLedgerEntries(id,9999);
+  if(!rows.length) return `<p class="small">예금 거래 내역이 없습니다.</p>`;
+  const dates=[...new Set(rows.map(e=>(e.ts||"").slice(0,10)).filter(Boolean))];
+  const activeDate=(bankLedgerDateFilter && dates.includes(bankLedgerDateFilter)) ? bankLedgerDateFilter : "";
+  const filtered=activeDate ? rows.filter(e=>(e.ts||"").slice(0,10)===activeDate) : rows;
+  const totalPages=Math.max(1,Math.ceil(filtered.length/BANK_LEDGER_PAGE_SIZE));
+  if(bankLedgerPage>totalPages) bankLedgerPage=totalPages;
+  if(bankLedgerPage<1) bankLedgerPage=1;
+  const start=(bankLedgerPage-1)*BANK_LEDGER_PAGE_SIZE;
+  const pageRows=filtered.slice(start,start+BANK_LEDGER_PAGE_SIZE);
+  const options=`<option value="">전체 날짜</option>${dates.map(day=>`<option value="${day}" ${day===activeDate?"selected":""}>${day}</option>`).join("")}`;
+  return `<div class="bankbookLedgerControls">
+      <label>날짜별 보기</label>
+      <select class="bankbookFilterSelect" onchange="setBankLedgerDateFilter(this.value)">${options}</select>
+      <span class="small">${filtered.length}건</span>
+    </div>
+    <div class="bankbookLedger"><table><thead><tr><th>날짜</th><th>구분</th><th>내용</th><th class="num">예금 변동</th></tr></thead><tbody>${pageRows.map(e=>{
+      const cls=e.delta>=0?"ledgerPlus":"ledgerMinus";
+      const day=e.ts ? seoulDateShortText(e.ts) : "-";
+      return `<tr><td>${day}</td><td>${e.depositKind||"-"}</td><td>${e.desc||e.type||"-"}</td><td class="num ${cls}">${e.delta>=0?"+":""}${won(e.delta)}</td></tr>`;
     }).join("")}</tbody></table></div>
     <div class="bankbookLedgerPager">
       <button class="bankPagerBtn" onclick="changeBankLedgerPage(-1)" ${bankLedgerPage<=1?"disabled":""}>이전</button>
@@ -2234,8 +3427,8 @@ function openBankbookShellHtml(book,leftHtml,rightHtml,footerHtml=""){
 }
 function cashBankbookHtml(id){
   const book=bankbookById("cash");
-  const left=`<h3>입출금통장</h3><div class="bankbookBigValue"><div class="bankbookBigIcon">🍊</div><span>현재 현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
-    <div class="bankbookTransferBox"><div class="bankbookTransferIcon">🤝</div><strong>친구 송금</strong><small>친구에게 열매를 바로 보냅니다.</small>
+  const left=`<h3>입출금통장</h3><div class="bankbookBigValue"><div class="bankbookBigIcon">${materialIcon("account_balance_wallet","msIcon")}</div><span>현재 현금</span><b>${won(balanceOf(id))}</b><em>바로 사용 가능</em></div>
+    <div class="bankbookTransferBox"><div class="bankbookTransferIcon">${materialIcon("handshake","msIcon")}</div><strong>친구 송금</strong><small>친구에게 열매를 바로 보냅니다.</small>
       <div class="bankbookTransferGrid"><select id="bankTransferTo">${studentOptions().replace(`<option value="${id}" ${id===id?"selected":""}>${studentName(id)}${studentJobName(student(id))?` (${studentJobName(student(id))})`:""}</option>`,"")}</select><input id="bankTransferAmount" type="number" min="1" value="10"></div>
       <input id="bankTransferMemo" class="bankbookTransferMemo" placeholder="메모 예: 물건값, 간식값">
       <button class="green bankbookTransferBtn" onclick="bankbookTransfer()">송금하기</button>
@@ -2249,7 +3442,8 @@ function depositBankbookHtml(id){
   const rate=savingsRate();
   const left=`<h3>예금통장</h3><div class="bankbookMiniStats"><div><span>현재 예금 잔액</span><b>${won(deposit)}</b></div><div><span>이자율</span><b>${Math.round(rate*100)}%</b></div><div><span>다음 이자 지급일</span><b>교사 지급 시</b></div><div><span>예상 이자액</span><b>${won(deposit*rate)}</b></div></div>
     <div class="bankbookForm"><div class="field"><label>예금 신청 금액</label><input id="reqDepositAmount" type="number" value="100"></div><div class="toolbar"><button class="blue" onclick="requestDepositIn()">예금 입금 신청</button><button class="green" onclick="requestDepositOut()">예금 출금 신청</button></div></div>`;
-  const right=`<h3>예금 신청/처리 내역</h3>${bankRequestHistoryHtml(id,["depositIn","depositOut"])}`;
+  const pending=bankRequestHistoryHtml(id,["depositIn","depositOut"]);
+  const right=`<h3>예금 거래 내역</h3>${depositLedgerTableHtml(id)}<div style="margin-top:18px"><h3>예금 신청 내역</h3>${pending}</div>`;
   return openBankbookShellHtml(book,left,right);
 }
 function savingBankbookHtml(id){
@@ -2303,6 +3497,23 @@ function bankStudentHtml(id){
   </div>`;
 }
 function financeStudentHtml(id){
+  if(isMobileViewport()){
+    const pages={
+      cash:["입출금",cashBankbookHtml(id)],
+      deposit:["예금",depositBankbookHtml(id)],
+      saving:["적금",savingBankbookHtml(id)],
+      investment:["투자",investmentBankbookHtml(id)],
+      loan:["대출",loanBankbookHtml(id)]
+    };
+    if(activeMobilePage && pages[activeMobilePage]) return `${mobileSubPageHeader(pages[activeMobilePage][0])}${pages[activeMobilePage][1]}`;
+    return `<div class="section"><div class="head"><div><h2>통장</h2><div class="sub">입출금, 예금, 적금, 투자, 대출만 나눠 봅니다.</div></div></div>${mobileMenuGrid([
+      {id:"cash",icon:"account_balance_wallet",title:"입출금",description:"현금, 송금, 최근 거래 내역",badge:won(balanceOf(id))},
+      {id:"deposit",icon:"savings",title:"예금",description:"예금 입금·출금 신청",badge:won(obj(data.deposits)[id]||0)},
+      {id:"saving",icon:"trending_up",title:"적금",description:"정기 납입과 만기 확인",badge:won(savingsValueOf(id))},
+      {id:"investment",icon:"query_stats",title:"투자",description:"티켓과 채권 평가금액",badge:won(ticketValueOf(id)+bondCurrentValueOf(id))},
+      {id:"loan",icon:"credit_score",title:"대출",description:"대출 한도와 상환 관리",badge:won(activeLoanBalance(id))}
+    ])}</div>`;
+  }
   return bankStudentHtml(id);
 }
 
@@ -2342,23 +3553,48 @@ function studentSettingsHtml(id){
   const s=student(id);
   return `<div class="settingsStudentPage">
     <div class="section"><div class="head"><div><h2>설정</h2><div class="sub">학생 정보, 신청 내역, 거래내역을 확인합니다.</div></div><button onclick="studentLogout()">로그아웃</button></div>
-      <div class="studentProfilePanel"><div>${avatarPreviewHtml(id)}</div><div><h3>${s?.name||"학생"}</h3><p class="small">재산 ${rankOfStudent(id)}위 · ${studentJobName(s)||"직업 없음"}</p><p class="small">현재 선택 탭은 왼쪽 메뉴에서 바꿀 수 있습니다.</p></div></div>
+      <div class="studentProfilePanel"><div>${avatarPreviewHtml(id)}</div><div><h3>${s?.name||"학생"}</h3><p class="small">재산 ${rankOfStudent(id)}위 · ${studentJobName(s)||"직업 없음"}</p><p class="small">교사용 화면 전환은 설정 안에서만 보이도록 정리했습니다.</p></div></div>
+      <div class="settingsActionRow"><button class="settingsTeacherAccessBtn" onclick="askTeacherPassword()">${materialIcon('admin_panel_settings','msIcon')} 교사용 화면</button></div>
     </div>
+    <div class="section studentThemeSection"><div class="head"><div><h2>앱 색상</h2><div class="sub">홈 버튼, 선택 표시, 강조 색상을 고릅니다.</div></div><span class="pill green">현재 ${studentThemeCatalog[studentThemeId(id)].name}</span></div><div class="studentThemeGrid">${studentThemeOptionsHtml(id)}</div></div>
     <div class="section"><div class="head"><div><h2>빠른 신청</h2><div class="sub">자주 쓰는 송금, 예금, 채권 신청입니다.</div></div></div>${studentQuickActionsHtml(id)}</div>
     <div class="section"><div class="head"><div><h2>내 신청 내역</h2><div class="sub">대기 중인 신청을 취소할 수 있습니다.</div></div></div>${myRequests(id)}</div>
     <div class="section"><div class="head"><div><h2>전체 거래내역</h2><div class="sub">모든 학생의 입금, 송금, 구매, 세금 기록을 같이 확인합니다.</div></div></div>${allStudentLedgerHtml()}</div>
   </div>`;
 }
+window.setStudentTheme = async function(id, theme){
+  if(!student(id)) return toast("학생 정보를 찾을 수 없습니다.");
+  const next=studentThemeCatalog[theme] ? theme : "green";
+  localStorage.setItem("studentTheme:"+id,next);
+  document.body.dataset.studentTheme=next;
+  try{
+    await dbSet(`students/${id}/theme`,next);
+    toast(`${studentThemeCatalog[next].name} 테마로 변경했어요.`);
+  }catch(e){
+    console.warn("theme save failed", e);
+    toast("색상은 이 기기에 적용했지만 저장은 실패했습니다.");
+  }
+  render();
+}
 function firstProductPublicPrice(){ const p=arr(data.products)[0]; return p ? (publicPrice(p) ?? money(productPrice(p))) : 10; }
 function visitHtml(){
-  const list=students();
+  if(isMobileViewport() && activeMobilePage && activeMobilePage.startsWith("peer_")){
+    return mobileRankStudentHomeHtml(activeMobilePage.slice(5));
+  }
+  if(isMobileViewport()){
+    return `<div class="visitPage">
+      <div class="section fullRankSection friendRankSectionV125"><div class="head"><div><h2>친구 현황</h2><div class="sub">프로필, 이름, 상태메시지, 자산을 순위 순서로 봅니다.</div></div></div>${friendStatusListHtml({mobile:true})}</div>
+      <div class="section fullRankSection"><div class="head"><div><h2>법인 재산 순위</h2><div class="sub">등록된 법인의 순자산과 공식 주가 기준입니다.</div></div></div>${corporationRankingTableHtml()}</div>
+      <div class="section"><div class="head"><div><h2>오늘의 거래 순위표</h2><div class="sub">세금 납부 표시가 된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
+    </div>`;
+  }
   return `<div class="visitPage">
-    <div class="section fullRankSection"><div class="head"><div><h2>개인 재산 순위</h2><div class="sub">학생 개인의 현금·예금·채권·상품·티켓·법인주식 기준입니다.</div></div></div>${assetRankingTableHtml()}</div>
+    <div class="visitDesktopGrid">
+      <div class="section fullRankSection friendRankSectionV125"><div class="head"><div><h2>친구 현황</h2><div class="sub">학생을 누르면 홈/프로필 미리보기가 열립니다.</div></div></div>${friendStatusListHtml({mobile:false})}</div>
+      <div class="section fullRankSection"><div class="head"><div><h2>개인 재산 순위</h2><div class="sub">표에서도 학생을 누르면 같은 미리보기를 볼 수 있습니다.</div></div></div>${assetRankingTableHtml()}</div>
+    </div>
     <div class="section fullRankSection"><div class="head"><div><h2>법인 재산 순위</h2><div class="sub">등록된 법인의 순자산과 공식 주가 기준입니다.</div></div></div>${corporationRankingTableHtml()}</div>
     <div class="section"><div class="head"><div><h2>오늘의 거래 순위표</h2><div class="sub">세금 납부 표시가 된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
-    <div class="section"><div class="head"><div><h2>친구 구경</h2><div class="sub">친구들의 아바타, 직업, 신용도를 보고 탭하면 자산 구성을 확인합니다.</div></div></div>
-      <div class="galleryGrid">${list.map(s=>`<div class="card peerCard" onclick="showPeerInfo('${s.id}')"><h3>${s.name}</h3><div class="peerCreditLine">${creditScorePill(s.id)}<span class="pill orange">직무유기 ${dutyStage(s.id)}단계</span></div><div class="small"><b>직업</b> ${studentJobName(s)||"없음"}</div>${avatarPreviewHtml(s.id)}<div class="small">탭해서 자산 구성 보기</div></div>`).join('')}</div>
-    </div>
   </div>`;
 }
 function marketSignal(){
@@ -2448,7 +3684,7 @@ function totalIncomeLineChartHtml(limit=14){ return totalHoldingsLineChartHtml(l
 
 async function addLedger(type, desc, lines, meta={}){
   const id = txid();
-  const entry = {id, ts:new Date().toISOString(), day:today(), type, desc, lines:lines.map(l=>({account:l.account,delta:money(l.delta)})), meta};
+  const entry = {id, ts:seoulIsoString(), day:today(), type, desc, lines:lines.map(l=>({account:l.account,delta:money(l.delta)})), meta};
   await dbSet("ledger/" + id, entry);
   return id;
 }
@@ -2491,12 +3727,106 @@ onValue(rootRef, async (snap)=>{
 });
 
 function setMode(m){mode=m; localStorage.setItem("economyMode",m); render();}
+function teacherTabCatalog(){
+  return [
+    {id:"dashboard",name:"홈",desktopName:"대시보드",icon:"dashboard"},
+    {id:"students",name:"학생",desktopName:"학생·잔고",icon:"groups"},
+    {id:"transactions",name:"경제",desktopName:"송금·지급·벌금",icon:"payments"},
+    {id:"jobs",name:"직업",desktopName:"직업·임금",icon:"work"},
+    {id:"shop",name:"상점",desktopName:"상품·상점",icon:"storefront"},
+    {id:"industry",name:"산업",desktopName:"산업",icon:"factory"},
+    {id:"corporations",name:"법인",desktopName:"법인·주식",icon:"domain"},
+    {id:"tickets",name:"티켓",desktopName:"티켓시장",icon:"confirmation_number"},
+    {id:"finance",name:"금융",desktopName:"예금·채권",icon:"savings"},
+    {id:"noticeboard",name:"알림",desktopName:"알림장",icon:"notifications"},
+    {id:"ledger",name:"장부",desktopName:"거래장부",icon:"receipt_long"},
+    {id:"settings",name:"설정",desktopName:"설정",icon:"settings"},
+    {id:"teacherMore",name:"메뉴",desktopName:"메뉴",icon:"menu"}
+  ];
+}
+function mobileTeacherPrimaryIds(){return ["dashboard","students","transactions","noticeboard","teacherMore"]}
+function teacherVisibleTab(active=currentTab){
+  if(!isMobileViewport()) return active;
+  return mobileTeacherPrimaryIds().includes(active) ? active : "teacherMore";
+}
+function teacherNavBadgeCount(id){
+  if(id==="noticeboard") return teacherUnreadMessages()+todayUncheckedNoticeCount();
+  if(id==="transactions") return arr(data.requests).length;
+  return 0;
+}
+function ensureTeacherMoreSection(){
+  const view=document.getElementById("teacherView");
+  if(view && !document.getElementById("teacherMore")){
+    const sec=document.createElement("section");
+    sec.id="teacherMore";
+    sec.className="tabPage hidden";
+    view.appendChild(sec);
+  }
+}
+function teacherTabsHtml(active=currentTab){
+  const visible=teacherVisibleTab(active);
+  const tabs=teacherTabCatalog().filter(t=>{
+    if(isMobileViewport()) return mobileTeacherPrimaryIds().includes(t.id);
+    return t.id!=="teacherMore";
+  });
+  return tabs.map(t=>{
+    const badge=teacherNavBadgeCount(t.id);
+    const label=isMobileViewport()?t.name:(t.desktopName||t.name);
+    return `<button class="${visible===t.id?'active':''}" data-tab="${t.id}" onclick="setTab('${t.id}')">${materialIcon(t.icon,'teacherTabIcon msIcon')}<span class="tabLabel">${label}</span>${badge>0?`<span class="navBadge">${badge>99?"99+":badge}</span>`:""}</button>`;
+  }).join("");
+}
+function switchToStudentMode(){
+  mode="student";
+  localStorage.setItem("economyMode","student");
+  activeMobileTeacherPage="";
+  localStorage.removeItem("activeMobileTeacherPage");
+  render();
+  toast("학생용 화면으로 전환");
+}
+function switchToTeacherMode(){
+  askTeacherPassword();
+}
 function setTab(tab){
   currentTab=tab;
+  activeMobileTeacherPage="";
+  localStorage.removeItem("activeMobileTeacherPage");
   document.querySelectorAll(".tabPage").forEach(p=>p.classList.add("hidden"));
   document.getElementById(tab)?.classList.remove("hidden");
   document.querySelectorAll("#teacherTabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   if(mode==="teacher") renderTeacherTab(tab);
+}
+function renderTeacherMore(){
+  ensureTeacherMoreSection();
+  const pending=arr(data.requests).length;
+  const unread=teacherUnreadMessages();
+  const badges={
+    tickets:`재고 ${totalTicketStock()}장`,
+    finance:`채권 ${arr(data.bonds).filter(b=>b.status==="active").length}`,
+    noticeboard:`미읽음 ${unread}`,
+    students:`학생 ${students().length}명`,
+    transactions:`대기 ${pending}개`
+  };
+  const descriptions={
+    dashboard:"경제 현황과 주요 요약",
+    students:"학생 등록, 잔고, 상세 관리",
+    transactions:"지급, 송금, 벌금, 승인 요청",
+    jobs:"직업 등록, 임금표, 성과급 심사",
+    shop:"상품, 도매, 자유시장, 승인 관리",
+    industry:"재료, 완제품, 산업 재고 관리",
+    corporations:"법인 계좌, 지분, 주가 관리",
+    tickets:"티켓 가격, 재고, 구매/판매 처리",
+    finance:"예금, 적금, 채권, 금리 관리",
+    noticeboard:"공지, 숙제, 체크, 메시지함",
+    ledger:"전체 거래 내역 확인",
+    settings:"학생용 탭, 데이터, 시스템 설정"
+  };
+  const cards=teacherTabCatalog()
+    .filter(t=>t.id!=="teacherMore" && !mobileTeacherPrimaryIds().includes(t.id))
+    .map(t=>({id:t.id,icon:t.icon,title:t.desktopName||t.name,description:descriptions[t.id]||"",badge:badges[t.id]||"",onClick:`setTab('${t.id}')`}));
+  document.getElementById("teacherMore").innerHTML = `<div class="section teacherMobileMenuSection"><div class="head"><div><h2>교사용 메뉴</h2><div class="sub">자주 쓰는 기능은 아래 메뉴에서 바로 들어갑니다.</div></div><button class="green" onclick="switchToStudentMode()">학생용 전환</button></div>
+    ${mobileMenuGrid([...cards,{id:"student",icon:"person",title:"학생용 화면",description:"학생 화면으로 돌아가기",onClick:"switchToStudentMode()"}])}
+    <div class="teacherMobileQuickStats"><span>대기 신청 ${pending}개</span><span>미읽음 ${unread}개</span><span>학생 ${students().length}명</span></div>
+  </div>`;
 }
 const teacherRenderers={
   dashboard:["대시보드",renderDashboard],
@@ -2508,8 +3838,10 @@ const teacherRenderers={
   corporations:["법인·주식",renderCorporations],
   tickets:["티켓시장",renderTickets],
   finance:["예금·채권",renderFinance],
+  noticeboard:["알림장",renderNoticeboardTeacher],
   ledger:["거래장부",renderLedger],
-  settings:["설정",renderSettings]
+  settings:["설정",renderSettings],
+  teacherMore:["교사용 메뉴",renderTeacherMore]
 };
 function renderTeacherTab(tab=currentTab){
   const item=teacherRenderers[tab] || teacherRenderers.dashboard;
@@ -2526,8 +3858,16 @@ function safeRender(name, fn){
 function render(){
   const teacherTabsEl=document.getElementById("teacherTabs"), teacherViewEl=document.getElementById("teacherView"), studentViewEl=document.getElementById("studentView");
   if(!teacherTabsEl || !teacherViewEl || !studentViewEl) return showStartupError("HTML 구조 오류","필수 화면 영역을 찾지 못했습니다.");
+  if(mode==="teacher" && !teacherUnlocked){
+    mode="student";
+    localStorage.setItem("economyMode","student");
+  }
   document.body.dataset.mode=mode;
   document.body.dataset.studentTab=studentTab;
+  document.body.dataset.studentTheme=(mode==="student" && selectedStudent) ? studentThemeId(selectedStudent) : "green";
+  ensureNoticeSubscriptions();
+  ensureTeacherMoreSection();
+  if(mode==="teacher") teacherTabsEl.innerHTML=teacherTabsHtml(currentTab);
   teacherTabsEl.classList.toggle("hidden",mode!=="teacher");
   teacherViewEl.classList.toggle("hidden",mode!=="teacher");
   studentViewEl.classList.toggle("hidden",mode!=="student");
@@ -2535,7 +3875,7 @@ function render(){
     renderTeacherTab(currentTab);
     document.querySelectorAll(".tabPage").forEach(p=>p.classList.add("hidden"));
     document.getElementById(currentTab)?.classList.remove("hidden");
-    document.querySelectorAll("#teacherTabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));
+    document.querySelectorAll("#teacherTabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===teacherVisibleTab(currentTab)));
   }else{
     safeRender("학생화면", renderStudentView);
   }
@@ -2583,6 +3923,26 @@ function renderDashboard(){
   const totalCash=students().reduce((a,s)=>a+balanceOf(s.id),0);
   const totalDeposit=Object.values(obj(data.deposits)).reduce((a,b)=>a+n(b),0);
   const activeBonds=arr(data.bonds).filter(b=>b.status==="active");
+  if(isMobileViewport()){
+    document.getElementById("dashboard").innerHTML = `
+      <div class="section"><div class="head"><div><h2>교사 대시보드</h2><div class="sub">오늘 확인할 요약만 먼저 보여줍니다.</div></div></div>
+        <div class="grid g2">
+          <div class="stat blue"><div class="label">학생</div><div class="value">${students().length}명</div></div>
+          <div class="stat green"><div class="label">현금 합계</div><div class="value">${won(totalCash)}</div></div>
+          <div class="stat red"><div class="label">오늘 미체크</div><div class="value">${todayUncheckedNoticeCount()}명</div></div>
+          <div class="stat orange"><div class="label">읽지 않은 메시지</div><div class="value">${teacherUnreadMessages()}개</div></div>
+        </div>
+      </div>
+      <div class="section"><div class="head"><div><h2>관리 메뉴</h2><div class="sub">상세 관리는 메뉴로 들어가서 처리합니다.</div></div></div>${mobileMenuGrid([
+        {id:"students",icon:"groups",title:"학생관리",description:"학생 목록, 잔액, 직업, 신용도",badge:`${students().length}명`,onClick:"setTab('students')"},
+        {id:"transactions",icon:"payments",title:"경제관리",description:"임금 지급, 거래, 벌금, 세금",badge:`신청 ${arr(data.requests).length}`,onClick:"setTab('transactions')"},
+        {id:"shop",icon:"storefront",title:"상점/시장",description:"상품, 티켓, 도매, 구매 승인",onClick:"setTab('shop')"},
+        {id:"finance",icon:"savings",title:"예금 관리",description:"예금, 적금, 채권 관리",badge:`채권 ${activeBonds.length}`,onClick:"setTab('finance')"},
+        {id:"noticeboard",icon:"notifications",title:"알림장",description:"알림, 체크 현황, 메시지함",badge:`미읽음 ${teacherUnreadMessages()}`,onClick:"setTab('noticeboard')"},
+        {id:"teacherMore",icon:"menu",title:"더보기",description:"금융, 법인, 장부, 설정 전체 메뉴",onClick:"setTab('teacherMore')"}
+      ])}</div>`;
+    return;
+  }
   document.getElementById("dashboard").innerHTML = `
     <div class="section">
       <div class="head"><div><h2>경제 현황판</h2><div class="sub">대표 지표를 총소득이 아니라 전체 열매 보유량으로 봅니다.</div></div><span class="pill blue">전체 보유량 기준</span></div>
@@ -2601,6 +3961,8 @@ function renderDashboard(){
         <div class="stat green"><div class="label">현금 합계</div><div class="value">${won(totalCash)}</div></div>
         <div class="stat purple"><div class="label">예금 합계</div><div class="value">${won(totalDeposit)}</div></div>
         <div class="stat orange"><div class="label">활성 채권</div><div class="value">${activeBonds.length}개</div></div>
+        <div class="stat red"><div class="label">알림 미체크</div><div class="value">${todayUncheckedNoticeCount()}명</div></div>
+        <div class="stat blue"><div class="label">읽지 않은 메시지</div><div class="value">${teacherUnreadMessages()}개</div></div>
       </div>
     </div>
     <div class="section"><div class="head"><div><h2>재산 순위표</h2><div class="sub">현금+예금+채권+상품+티켓+법인주식 기준입니다.</div></div></div>${assetRankingTableHtml()}</div>
@@ -2637,7 +3999,7 @@ function requestGroupCard(type,title,rows){
 }
 function requestLineHtml(r){
   return `<div class="requestLine">
-    <div class="requestLineTop"><b>${studentName(r.studentId)}</b><span class="small">${new Date(r.ts).toLocaleString("ko-KR")}</span></div>
+    <div class="requestLineTop"><b>${studentName(r.studentId)}</b><span class="small">${seoulDateTimeText(r.ts)}</span></div>
     <div>${requestDesc(r)}</div>
     <div class="actions"><button class="green" onclick="approveRequest('${r.id}')">승인</button><button class="danger" onclick="rejectRequest('${r.id}')">거절</button></div>
   </div>`;
@@ -2671,7 +4033,7 @@ function requestDesc(r){
   return "";
 }
 
-function renderStudentsPage(){
+function renderStudentsPageDesktop(){
   document.getElementById("students").innerHTML = `
     <div class="section">
       <div class="head"><div><h2>학생 등록</h2><div class="sub">PIN은 학생 로그인용입니다. 처음엔 4자리 숫자로 넣으면 됩니다.</div></div></div>
@@ -2700,6 +4062,23 @@ function renderStudentsPage(){
     </div>
     ${approvedWorkClaimsPayoutHtml()}
     ${taxOfficeTeacherWageHtml()}`;
+}
+function renderStudentsPage(){
+  if(!isMobileViewport()) return renderStudentsPageDesktop();
+  if(activeMobileTeacherPage){
+    renderStudentsPageDesktop();
+    document.getElementById("students").innerHTML = `${mobileSubPageHeader({
+      list:"학생 목록",balance:"잔액 수정",jobs:"직업 배정",credit:"신용도 관리",fine:"경고/벌금 관리"
+    }[activeMobileTeacherPage]||"학생관리","backMobileTeacherPage()")}<div class="mobileTeacherDetail">${document.getElementById("students").innerHTML}</div>`;
+    return;
+  }
+  document.getElementById("students").innerHTML = `<div class="section"><div class="head"><div><h2>학생관리</h2><div class="sub">학생 관련 관리를 필요한 메뉴로 나눠 처리합니다.</div></div></div>${mobileMenuGrid([
+    {id:"list",icon:"◉",title:"학생 목록",description:"학생 추가, 정보 수정, 상세 보기",badge:`${students().length}명`},
+    {id:"balance",icon:"₩",title:"잔액 수정",description:"학생별 잔액과 예금 확인"},
+    {id:"jobs",icon:"⚙",title:"직업 배정",description:"학생 직업과 임금 관리"},
+    {id:"credit",icon:"★",title:"신용도 관리",description:"신용도와 경고 확인"},
+    {id:"fine",icon:"!",title:"경고/벌금 관리",description:"벌금 고지와 정리"}
+  ].map(c=>({...c,onClick:`openMobileTeacherPage('${c.id}')`})))}</div>`;
 }
 function studentRow(s){
   const tickets=Object.keys(ticketMeta).map(k=>`${ticketMeta[k].name.replace(" 면제권","").replace("1시간 ","")} ${n(obj(obj(data.ticketHoldings)[s.id])[k])}`).join(" / ");
@@ -3196,7 +4575,7 @@ function transactionStudentTiles(){
     <span class="tileJob">${studentJobName(s)||"직업 없음"}</span>
   </label>`).join("")}</div>`;
 }
-function renderTransactions(){
+function renderTransactionsDesktop(){
   document.getElementById("transactions").innerHTML = `
     <div class="section"><div class="head"><div><h2>상금 지급·벌금 환수</h2><div class="sub">학생 타일을 클릭해 여러 명을 선택한 뒤 한 번에 처리합니다.</div></div><span id="bulkTxCount" class="pill blue">0명 선택</span></div>
       <div class="bulkTxLayout">
@@ -3232,7 +4611,24 @@ function renderTransactions(){
     <div class="section"><div class="head"><div><h2>벌금 고지서 현황</h2><div class="sub">경고 2회 또는 수동 벌금으로 발행된 고지서입니다.</div></div></div>${fineAdminTableHtml()}</div>`;
 }
 
-function renderShop(){
+function renderTransactions(){
+  if(!isMobileViewport()) return renderTransactionsDesktop();
+  if(activeMobileTeacherPage){
+    renderTransactionsDesktop();
+    document.getElementById("transactions").innerHTML = `${mobileSubPageHeader({
+      wage:"임금 지급",ledger:"거래 내역",tax:"세금 관리",fine:"경고/벌금 관리"
+    }[activeMobileTeacherPage]||"경제관리","backMobileTeacherPage()")}<div class="mobileTeacherDetail">${document.getElementById("transactions").innerHTML}</div>`;
+    return;
+  }
+  document.getElementById("transactions").innerHTML = `<div class="section"><div class="head"><div><h2>경제관리</h2><div class="sub">임금, 거래, 벌금, 세금을 메뉴로 나눠 처리합니다.</div></div></div>${mobileMenuGrid([
+    {id:"wage",icon:"₩",title:"임금 지급",description:"전체 지급과 학생별 송금"},
+    {id:"ledger",icon:"≡",title:"거래 내역",description:"최근 거래와 요청 확인"},
+    {id:"tax",icon:"%",title:"세금 관리",description:"세금 납부와 국세청 기능"},
+    {id:"fine",icon:"!",title:"경고/벌금 관리",description:"벌금 고지와 정리"}
+  ].map(c=>({...c,onClick:`openMobileTeacherPage('${c.id}')`})))}</div>`;
+}
+
+function renderShopDesktop(){
   document.getElementById("shop").innerHTML = `
     <div class="section"><div class="head"><div><h2>상품·상점</h2><div class="sub">상품 카드를 누르면 가격 차트를 볼 수 있습니다.</div></div></div>
       <div class="grid g4">${arr(data.products).map(p=>`<div class="card" onclick="showProductChart('${p.id}')" style="cursor:pointer"><h3>${product(p.id)?.name||p.name}</h3><div class="value">${won(publicPrice(product(p.id)||p))}</div><div class="sub">${product(p.id)?.note||p.note||""}</div><div class="toolbar"><span class="pill blue">${priceTypeLabel(product(p.id)||p)}</span><button onclick="event.stopPropagation();showProductChart('${p.id}')">차트</button></div></div>`).join("")}</div>
@@ -3343,13 +4739,30 @@ function ticketCard(k){
   </div>`;
 }
 
-function renderFinance(){
+function renderShop(){
+  if(!isMobileViewport()) return renderShopDesktop();
+  if(activeMobileTeacherPage){
+    renderShopDesktop();
+    document.getElementById("shop").innerHTML = `${mobileSubPageHeader({
+      tickets:"티켓 관리",snacks:"과자 도매 관리",free:"자유시장 관리",approval:"구매 승인 관리"
+    }[activeMobileTeacherPage]||"상점/시장","backMobileTeacherPage()")}<div class="mobileTeacherDetail">${document.getElementById("shop").innerHTML}</div>`;
+    return;
+  }
+  document.getElementById("shop").innerHTML = `<div class="section"><div class="head"><div><h2>상점/시장</h2><div class="sub">상품, 도매, 자유시장, 승인 업무를 나눠 봅니다.</div></div></div>${mobileMenuGrid([
+    {id:"tickets",icon:"▤",title:"티켓 관리",description:"티켓 가격과 재고 관리"},
+    {id:"snacks",icon:"□",title:"과자 도매 관리",description:"상품 가격과 도매 처리"},
+    {id:"free",icon:"▦",title:"자유시장 관리",description:"판매글과 시장 상태 확인"},
+    {id:"approval",icon:"✓",title:"구매 승인 관리",description:"학생 구매 요청 처리"}
+  ].map(c=>({...c,onClick:`openMobileTeacherPage('${c.id}')`})))}</div>`;
+}
+
+function renderFinanceDesktop(){
   document.getElementById("finance").innerHTML = `
     <div class="section"><div class="head"><div><h2>예금·채권</h2><div class="sub">채권은 교사가 먼저 발행하고, 학생은 발행 재고 안에서만 구매 신청합니다.</div></div></div>
       <div class="grid g4">
         <div class="card"><h3>예금 입금</h3><div class="field"><label>학생</label><select id="depositStudent">${studentOptions()}</select></div><div class="field"><label>금액</label><input id="depositAmount" type="number" value="100"></div><button class="blue" onclick="depositMoney()">입금</button></div>
         <div class="card"><h3>예금 출금</h3><div class="field"><label>학생</label><select id="withdrawStudent">${studentOptions()}</select></div><div class="field"><label>금액</label><input id="withdrawAmount" type="number" value="100"></div><button class="green" onclick="withdrawMoney()">출금</button></div>
-        <div class="card"><h3>예금 이자</h3><div class="field"><label>이자율 %</label><input id="depositRate" type="number" value="${data.settings.depositRate*100}"></div><button class="purple" onclick="payDepositInterest()">전체 지급</button></div>
+        <div class="card"><h3>예금 이자</h3><div class="field"><label>이자율 %</label><input id="depositRate" type="number" value="${data.settings.depositRate*100}"></div><div class="field"><label>지급 횟수</label><input id="depositInterestPeriods" type="number" min="1" value="1"></div><button class="purple" onclick="payDepositInterest()">전체 지급</button><p class="small">밀린 이자는 횟수를 늘려 소급 지급합니다. 예: 3회분이면 현재 예금에 이자를 3번 복리로 붙입니다.</p></div>
         <div class="card bondIssueCreateCard">
           <h3>채권 발행</h3>
           <div class="field"><label>채권명</label><input id="issueBondName" value="7일 국채"></div>
@@ -3361,6 +4774,8 @@ function renderFinance(){
         </div>
       </div>
     </div>
+    <div class="section"><div class="head"><div><h2>예금 가입 현황</h2><div class="sub">현재 예금 잔액이 있는 학생과 1회 예상 이자를 확인하고, 학생별로 이자를 지급합니다.</div></div></div>${depositHoldingRowsHtml()}</div>
+    <div class="section"><div class="head"><div><h2>적금 가입 현황</h2><div class="sub">가입 중인 적금의 만기일, 현재 평가액, 발생 이자를 확인하고 상품별로 이자를 수동 지급합니다.</div></div></div>${savingsHoldingRowsHtml()}</div>
     <div class="section"><div class="head"><div><h2>발행 채권 재고</h2><div class="sub">학생은 아래 발행 채권 중 남은 재고가 있는 것만 구매할 수 있습니다.</div></div></div>${bondIssueTableHtml()}</div>
     <div class="section"><div class="head"><h2>학생 보유 채권 목록</h2><button class="primary" onclick="matureDueBonds()">만기 지난 채권 일괄 처리</button></div>
       <div class="scroll"><table><thead><tr><th>소유자</th><th>채권명</th><th class="num">원금</th><th class="num">금리</th><th>만기일</th><th>상태</th><th>처리</th></tr></thead><tbody>
@@ -3368,6 +4783,24 @@ function renderFinance(){
       </tbody></table></div>
     </div>`;
 }
+function renderFinance(){
+  if(!isMobileViewport()) return renderFinanceDesktop();
+  if(activeMobileTeacherPage){
+    renderFinanceDesktop();
+    document.getElementById("finance").innerHTML = `${mobileSubPageHeader({
+      deposit:"예금 관리",savings:"적금 관리",bonds:"채권 관리",rates:"금리 설정"
+    }[activeMobileTeacherPage]||"예금·채권","backMobileTeacherPage()")}<div class="mobileTeacherDetail">${document.getElementById("finance").innerHTML}</div>`;
+    return;
+  }
+  const activeBonds=arr(data.bonds).filter(b=>b.status==="active").length;
+  document.getElementById("finance").innerHTML = `<div class="section"><div class="head"><div><h2>예금·채권</h2><div class="sub">예금, 적금, 채권 업무를 메뉴로 나눠 처리합니다.</div></div></div>${mobileMenuGrid([
+    {id:"deposit",icon:"◇",title:"예금 관리",description:"입금, 출금, 이자 지급"},
+    {id:"savings",icon:"▣",title:"적금 관리",description:"가입 현황과 만기 처리"},
+    {id:"bonds",icon:"◌",title:"채권 관리",description:"발행, 보유, 만기 처리",badge:`활성 ${activeBonds}`},
+    {id:"rates",icon:"%",title:"금리 설정",description:"예금/채권 금리 확인"}
+  ].map(c=>({...c,onClick:`openMobileTeacherPage('${c.id}')`})))}</div>`;
+}
+
 function bondIssueTableHtml(){
   const rows=arr(data.bondIssues).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   if(!rows.length) return `<p class="small">아직 발행한 채권이 없습니다.</p>`;
@@ -3437,7 +4870,7 @@ function renderLedger(){
   const entries=[...(derived.ledger || [])].sort((a,b)=>(b.ts||"").localeCompare(a.ts||"")).slice(0,300);
   document.getElementById("ledger").innerHTML = `
     <div class="section"><div class="head"><div><h2>오늘 거래왕</h2><div class="sub">세금 납부/거래 인정된 학생 간 거래만 집계합니다.</div></div></div>${tradeKingTableHtml()}</div>
-    <div class="section"><div class="head"><div><h2>거래장부</h2><div class="sub">최근 300건을 먼저 표시합니다. 모든 잔고 계산은 전체 장부를 기준으로 유지됩니다.</div></div><span class="pill blue">전체 ${derived.ledger.length}건</span></div><div class="scroll"><table><thead><tr><th>시간</th><th>종류</th><th>내용</th><th>변동</th><th>세금/거래인정</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${new Date(e.ts).toLocaleString("ko-KR")}</td><td><span class="pill">${e.type}</span></td><td>${e.desc}</td><td>${arr(e.lines).map(l=>`${studentName(l.account)} ${l.delta>0?"+":""}${won(l.delta)}`).join("<br>")}</td><td>${ledgerTaxButton(e)}</td></tr>`).join("") || `<tr><td colspan="5">거래 없음</td></tr>`}</tbody></table></div></div>`;
+    <div class="section"><div class="head"><div><h2>거래장부</h2><div class="sub">최근 300건을 먼저 표시합니다. 모든 잔고 계산은 전체 장부를 기준으로 유지됩니다.</div></div><span class="pill blue">전체 ${derived.ledger.length}건</span></div><div class="scroll"><table><thead><tr><th>시간</th><th>종류</th><th>내용</th><th>변동</th><th>세금/거래인정</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${seoulDateTimeText(e.ts)}</td><td><span class="pill">${e.type}</span></td><td>${e.desc}</td><td>${arr(e.lines).map(l=>`${studentName(l.account)} ${l.delta>0?"+":""}${won(l.delta)}`).join("<br>")}</td><td>${ledgerTaxButton(e)}</td></tr>`).join("") || `<tr><td colspan="5">거래 없음</td></tr>`}</tbody></table></div></div>`;
 }
 
 function firstTicketKey(){ return Object.keys(ticketMeta)[0] || "classClean"; }
@@ -3494,7 +4927,7 @@ function avatarManagerId(raw){
   return base || `avatar_${Date.now().toString(36)}`;
 }
 avatarManageHtml = function(){
-  const items=avatarItemCatalog();
+  const items=avatarItemCatalog(true);
   return `<div class="avatarManageLayout">
     <div class="card avatarAddCard">
       <h3>새 아바타 등록</h3>
@@ -3511,15 +4944,39 @@ avatarManageHtml = function(){
     </div>
     <div class="card avatarCreatorCard">
       <h3>제작자 수익 연결</h3>
-      <div class="scroll" style="max-height:420px"><table><thead><tr><th>아바타</th><th>가격</th><th>제작자</th><th>관리</th></tr></thead><tbody>${items.map(it=>`<tr>
+      <div class="scroll" style="max-height:420px"><table><thead><tr><th>아바타</th><th>이미지 URL</th><th>가격</th><th>제작자</th><th>상점 표시</th><th>관리</th></tr></thead><tbody>${items.map(it=>`<tr>
         <td><div class="avatarManageItem">${itemThumb(it)}<div><b>${it.name}</b><br><span class="small">${it.id}</span>${avatarCreatorLineHtml(it)}</div></div></td>
+        <td><input id="avatarSrc_${it.id}" value="${escapeHtml(it.src||"")}" placeholder="https://... 또는 assets/avatars/..."><button class="compactBtn" onclick="saveAvatarImage('${it.id}')">이미지 저장</button></td>
         <td class="num">${won(cosmeticPrice(it))}</td>
         <td><select id="avatarCreator_${it.id}">${avatarCreatorOptions(avatarCreatorId(it))}</select></td>
+        <td><label><input type="checkbox" id="avatarVisible_${it.id}" ${isAvatarHidden(it.id)?"":"checked"} onchange="saveAvatarVisibility('${it.id}',this.checked)"> 표시</label><br><span class="small">${isAvatarHidden(it.id)?"상점에서 숨김":"상점에 표시"}</span></td>
         <td><button onclick="saveAvatarCreator('${it.id}')">저장</button>${isDatabaseAvatar(it.id)?` <button class="danger" onclick="deleteManagedAvatar('${it.id}')">삭제</button>`:""}</td>
-      </tr>`).join("") || `<tr><td colspan="4">등록된 아바타가 없습니다.</td></tr>`}</tbody></table></div>
+      </tr>`).join("") || `<tr><td colspan="6">등록된 아바타가 없습니다.</td></tr>`}</tbody></table></div>
     </div>
   </div>`;
 };
+
+function studentScreenVisibilityHtml(){
+  const hidden=obj(data.settings?.hiddenStudentTabs);
+  const activeForSomeStudent=(tab)=>{
+    if(tab.dynamic==="workClaims") return students().some(s=>pieceRateJobsForStudent(s.id).length);
+    if(tab.dynamic==="corporations") return students().some(s=>isCorporationAssignedStudent(s.id));
+    if(tab.dynamic==="role") return students().some(s=>specialRoleIdsForStudent(s.id).length);
+    return true;
+  };
+  const rows=studentTabCatalog().map(tab=>{
+    const visible=studentTabVisible(tab.id);
+    const possible=activeForSomeStudent(tab);
+    return `<tr>
+      <td><b>${tab.icon} ${tab.name}</b><br><span class="small">${tab.note}</span></td>
+      <td>${tab.dynamic?`<span class="pill purple">조건부</span>`:`<span class="pill blue">공통</span>`}</td>
+      <td>${possible?`<span class="pill green">표시 대상 있음</span>`:`<span class="pill orange">현재 대상 없음</span>`}</td>
+      <td>${visible?`<span class="pill green">학생 화면 표시</span>`:`<span class="pill red">숨김</span>`}</td>
+      <td>${tab.id==="dashboard"?`<span class="small">기본 화면</span>`:`<button class="${visible?"orange":"green"}" onclick="setStudentTabVisibility('${tab.id}',${visible?false:true})">${visible?"숨기기":"표시하기"}</button>`}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="scroll"><table><thead><tr><th>학생 메뉴</th><th>종류</th><th>대상</th><th>현재 상태</th><th>처리</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
 
 function renderSettingsBasicFallback(msg=""){
   const el=document.getElementById("settings");
@@ -3568,12 +5025,18 @@ function renderSettingsUnsafe(){
       <button class="danger" onclick="resetAll()">전체 초기화</button>
     </div>
     <div class="expireNotice"><b>학생 유지 경제 데이터 초기화</b>: 학생 이름, PIN, 직업, 아바타, 미니룸, 치장템 가격은 유지하고 잔고·거래장부·예금·채권·보유상품·보유티켓·신청·시장매물·가격기록만 초기화합니다.</div>
+    <div class="card" style="margin-top:12px"><h3>앱 업데이트</h3><p class="small">배포 후 화면이 예전 버전이면 인터넷 기록을 지우거나 앱을 삭제하지 말고 이 버튼만 누르세요.</p><button class="blue" onclick="window.forceAppUpdate ? window.forceAppUpdate() : location.reload()">최신 버전 다시 불러오기</button></div>
     <p class="small">중요: 지금 버전은 PIN을 화면에서 확인하는 간단 버전입니다. 실제 보안 로그인은 다음 단계에서 Firebase Authentication으로 바꿔야 합니다.</p>
   </div>
 
   <div class="section">
     <div class="head"><div><h2>아바타 등록·제작자 수익</h2><div class="sub">이미지 URL을 입력해 아바타를 추가하고, 판매 시 제작 학생에게 ${avatarCreatorPercent()}%를 자동 지급합니다.</div></div></div>
     ${avatarManageHtml()}
+  </div>
+
+  <div class="section">
+    <div class="head"><div><h2>학생 화면 표시 현황</h2><div class="sub">학생 화면에 보이는 메뉴를 확인하고 숨기거나 다시 표시합니다.</div></div></div>
+    ${studentScreenVisibilityHtml()}
   </div>
 
   <div class="section">
@@ -3611,7 +5074,40 @@ function renderSettingsUnsafe(){
     <div class="head"><div><h2>치장템 가격 관리</h2><div class="sub">아바타와 미니룸 가격을 직접 설정합니다. 비워두지 말고 숫자로 저장하세요.</div></div></div>
     ${cosmeticPriceManageHtml()}
     <div class="toolbar"><button class="primary" onclick="saveCosmeticPrices()">치장템 가격 저장</button><button onclick="resetCosmeticPrices()">기본 가격으로 되돌리기</button></div>
-  </div>`;
+  </div>
+  `;
+}
+
+function mobileMoreStudentHtml(id){
+  if(isMobileViewport() && activeMobilePage && activeMobilePage.startsWith("peer_")){
+    return mobileRankStudentHomeHtml(activeMobilePage.slice(5));
+  }
+  const pages={
+    profile:["내 정보",studentSettingsHtml(id)],
+    assets:["자산 구성",`<div class="section"><div class="head"><div><h2>자산 구성</h2><div class="sub">현금, 예금, 채권, 상품을 한눈에 봅니다.</div></div></div>${assetPieHtml(id)}${studentSummaryCardsHtml(id)}</div>`],
+    rank:["순위",visitHtml()],
+    avatar:["아바타 상점",cosmeticShopHtml(id)],
+    room:["미니룸",miniRoomGalleryHtml(id)],
+    job:["직업 업무",industryHtml(id)],
+    work:["업무 임금 신청",studentWorkClaimsHtml(id)],
+    corp:["법인 업무",corporationStudentHtml(id)],
+    settings:["설정",studentSettingsHtml(id)],
+    help:["도움말",`<div class="section"><div class="head"><div><h2>도움말</h2><div class="sub">경제교실 규칙과 사용법을 확인합니다.</div></div></div><div class="card"><p>경제지수, 거래, 예금, 시장 기능 설명을 열어볼 수 있습니다.</p><button class="primary" onclick="showEconomyHelp()">경제교실 도움말 열기</button></div></div>`]
+  };
+  if(activeMobilePage && pages[activeMobilePage]) return `${mobileSubPageHeader(pages[activeMobilePage][0])}${pages[activeMobilePage][1]}`;
+  const cards=[
+    {id:"profile",icon:"person",title:"내 정보",description:"프로필과 신청 내역"},
+    {id:"assets",icon:"pie_chart",title:"자산 구성",description:"자산 그래프와 요약",badge:won(totalAssetsOf(id))},
+    {id:"rank",icon:"leaderboard",title:"순위·구경",description:"개인/법인 순위와 친구 보기"},
+    {id:"avatar",icon:"face",title:"아바타",description:"상점과 보유 아바타"},
+    {id:"room",icon:"chair",title:"미니룸",description:"내 방 꾸미기"},
+    {id:"job",icon:"work",title:"직업",description:"생산·제작·직업 기능"},
+    ...(pieceRateJobsForStudent(id).length?[{id:"work",icon:"◇",title:"업무 임금",description:"성과급 업무 제출"}]:[]),
+    ...(isCorporationAssignedStudent(id)?[{id:"corp",icon:"▥",title:"법인 업무",description:"법인 계정 관리"}]:[]),
+    {id:"settings",icon:"settings",title:"설정",description:"로그아웃과 전체 내역"},
+    {id:"help",icon:"help",title:"도움말",description:"경제교실 안내"}
+  ];
+  return `<div class="section"><div class="head"><div><h2>메뉴</h2><div class="sub">홈에 두기엔 자잘하지만 필요한 기능을 모았습니다.</div></div></div>${mobileMenuGrid(cards)}</div>`;
 }
 
 function renderStudentView(){
@@ -3645,6 +5141,7 @@ function renderStudentView(){
   const activeTab = studentNavItems().some(([id])=>id===studentTab) ? studentTab : "dashboard";
   if(activeTab!==studentTab){studentTab=activeTab; localStorage.setItem("studentTab",studentTab);}
   const body = studentTab==="dashboard" ? studentDashboardHtml(selected)
+    : studentTab==="noticeboard" ? noticeboardStudentHtml(selected)
     : studentTab==="market" ? marketHtml(selected)
     : studentTab==="industry" ? industryHtml(selected)
     : studentTab==="workClaims" ? studentWorkClaimsHtml(selected)
@@ -3654,23 +5151,25 @@ function renderStudentView(){
     : studentTab==="cosmetic" ? cosmeticShopHtml(selected)
     : studentTab==="products" ? shopAndTicketStudentHtml(selected)
     : studentTab==="finance" ? financeStudentHtml(selected)
+    : studentTab==="more" ? mobileMoreStudentHtml(selected)
     : studentTab==="visit" ? visitHtml()
     : studentTab==="settings" ? studentSettingsHtml(selected)
     : studentDashboardHtml(selected);
   document.getElementById("studentView").innerHTML = `
-    <div class="tabletAppShell">
+    <div class="tabletAppShell" data-student-tab="${studentTab}">
       ${studentSideNavHtml(studentTab)}
       <div class="tabletMain">
-        ${studentAppHeaderHtml(s,selected)}
-        ${studentTabsHtml(studentTab)}
+        ${isMobileViewport()?"":studentAppHeaderHtml(s,selected)}
+        ${isMobileViewport()?"":studentTabsHtml(studentTab)}
         <div class="tabletContent">${body}</div>
+        ${isMobileViewport()?studentTabsHtml(studentTab):""}
       </div>
     </div>`;
 }
 function myRequests(id){
   const list=arr(data.requests).filter(r=>r.studentId===id).sort((a,b)=>b.ts.localeCompare(a.ts));
   if(!list.length) return `<p class="small">대기 중인 신청이 없습니다.</p>`;
-  return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${new Date(r.ts).toLocaleString("ko-KR")}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>시간</th><th>신청</th><th>내용</th><th>취소</th></tr></thead><tbody>${list.map(r=>`<tr><td>${seoulDateTimeText(r.ts)}</td><td>${requestTypeName(r.type)}</td><td>${requestDesc(r)}</td><td><button class="requestCancelBtn" onclick="cancelRequest('${r.id}')">취소</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 
 
@@ -3729,7 +5228,7 @@ async function payApprovedWorkClaimIds(ids,paidBy="teacher"){
       if(!c || c.status!=="approved" || c.paid===true || money(c.approvedWage)<=0) return;
       const amount=money(c.approvedWage);
       const ledgerId="tx_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6)+"_"+paid;
-      current.ledger[ledgerId]={id:ledgerId,ts:new Date().toISOString(),day:today(),type:"wage",desc:"업무 임금 지급",lines:[{account:CENTRAL,delta:-amount},{account:c.studentId,delta:amount}],meta:{reason:"업무 임금 지급",source:"workClaim",workClaimId:id,studentId:c.studentId,amount,type:"wage",createdAt:new Date().toISOString()}};
+      current.ledger[ledgerId]={id:ledgerId,ts:seoulIsoString(),day:today(),type:"wage",desc:"업무 임금 지급",lines:[{account:CENTRAL,delta:-amount},{account:c.studentId,delta:amount}],meta:{reason:"업무 임금 지급",source:"workClaim",workClaimId:id,studentId:c.studentId,amount,type:"wage",createdAt:seoulIsoString()}};
       c.status="paid"; c.paid=true; c.paidAt=new Date().toISOString(); c.paidBy=paidBy; c.updatedAt=new Date().toISOString();
       paid++; total+=amount;
     });
@@ -3753,7 +5252,7 @@ window.payTaxOfficeWage = async function(officerId){
     if(current.taxOfficeWageRecords[recordId]) return current;
     current.ledger=current.ledger||{};
     const ledgerId="tx_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-    current.ledger[ledgerId]={id:ledgerId,ts:new Date().toISOString(),day:today(),type:"wage",desc:"국세청 자동 임금 지급",lines:[{account:CENTRAL,delta:-est.total},{account:officerId,delta:est.total}],meta:{source:"taxOfficeWage",recordId,officerId,...est}};
+    current.ledger[ledgerId]={id:ledgerId,ts:seoulIsoString(),day:today(),type:"wage",desc:"국세청 자동 임금 지급",lines:[{account:CENTRAL,delta:-est.total},{account:officerId,delta:est.total}],meta:{source:"taxOfficeWage",recordId,officerId,...est}};
     current.taxOfficeWageRecords[recordId]={id:recordId,officerId,officerName:studentName(officerId),amount:est.total,day:est.day,paidAt:new Date().toISOString(),paidBy:"teacher",details:est,ledgerId};
     return current;
   });
@@ -4332,10 +5831,73 @@ window.withdrawMoney = async function(){
   if(await doDepositOut(document.getElementById("withdrawStudent").value, document.getElementById("withdrawAmount").value)) toast("출금 완료");
 }
 window.payDepositInterest = async function(){
-  const rate=n(document.getElementById("depositRate").value)/100; let total=0; const lines=[];
-  students().forEach(s=>{const interest=money(n(obj(data.deposits)[s.id])*rate); if(interest>0){lines.push({account:s.id,delta:interest}); total+=interest;}});
+  const rate=depositInterestRateFromInput();
+  const periods=depositInterestPeriodsFromInput();
+  const rows=depositInterestRows(rate,periods);
+  const total=money(rows.reduce((sum,row)=>sum+row.interest,0));
   if(total<=0) return toast("지급할 이자 없음");
-  await addLedger("예금이자",`예금 이자 ${Math.round(rate*1000)/10}%`,[{account:CENTRAL,delta:-total},...lines],{rate}); toast("이자 지급 완료");
+  const updates={"settings/depositRate":rate,"settings/lastDepositInterestAt":new Date().toISOString()};
+  rows.forEach(row=>{
+    updates[`deposits/${row.student.id}`]=row.nextBalance;
+  });
+  await dbUpdate("",updates);
+  await addLedger("예금이자",`예금 이자 ${Math.round(rate*1000)/10}%${periods>1?` x ${periods}회`:""}`,[{account:CENTRAL,delta:-total}],{
+    rate,
+    periods,
+    total,
+    deposits:rows.reduce((out,row)=>{
+      out[row.student.id]={principal:row.principal,interest:row.interest,balance:row.nextBalance};
+      return out;
+    },{})
+  });
+  toast(`이자 지급 완료: ${won(total)}`);
+}
+window.payDepositInterestForStudent = async function(studentId){
+  const s=student(studentId);
+  if(!s) return toast("학생을 찾을 수 없습니다.");
+  const rate=depositInterestRateFromInput();
+  const periods=depositInterestPeriodsFromInput();
+  const principal=money(n(obj(data.deposits)[studentId]));
+  const interest=money(principal*(Math.pow(1+rate,periods)-1));
+  if(principal<=0 || interest<=0) return toast("지급할 예금 이자가 없습니다.");
+  const balance=money(principal+interest);
+  await dbUpdate("",{
+    [`deposits/${studentId}`]:balance,
+    "settings/depositRate":rate,
+    "settings/lastDepositInterestAt":new Date().toISOString()
+  });
+  await addLedger("예금이자",`${studentName(studentId)} 예금 이자 ${Math.round(rate*1000)/10}%${periods>1?` x ${periods}회`:""}`,[{account:CENTRAL,delta:-interest}],{
+    rate,
+    periods,
+    total:interest,
+    deposits:{[studentId]:{principal,interest,balance}}
+  });
+  toast(`${studentName(studentId)} 예금 이자 지급 완료: ${won(interest)}`);
+}
+window.paySavingInterest = async function(id){
+  const s=obj(data.savings)[id];
+  if(!s || s.status!=="active") return toast("진행 중인 적금을 찾을 수 없습니다.");
+  const projected=savingProjection(s);
+  const defaultPeriods=Math.max(1,projected.weeks||1);
+  const input=prompt(`${studentName(s.owner)} 적금 이자를 몇 회분 지급할까요?`, String(defaultPeriods));
+  if(input===null) return;
+  const periods=Math.max(1,Math.floor(n(input)||defaultPeriods));
+  const rate=(n(s.rate)||Math.round(savingsRate()*100))/100;
+  const principal=money(s.balance ?? s.totalPaid ?? 0);
+  const interest=money(principal*(Math.pow(1+rate,periods)-1));
+  if(principal<=0 || interest<=0) return toast("지급할 적금 이자가 없습니다.");
+  const balance=money(principal+interest);
+  await dbUpdate("savings/"+id,{balance,lastInterestAt:today()});
+  await addLedger("적금이자",`${studentName(s.owner)} 적금 이자 ${Math.round(rate*1000)/10}% x ${periods}회`,[{account:CENTRAL,delta:-interest}],{
+    savingId:id,
+    owner:s.owner,
+    rate,
+    periods,
+    principal,
+    interest,
+    balance
+  });
+  toast(`적금 이자 지급 완료: ${won(interest)}`);
 }
 async function doBondBuy(studentId,principal,rate,issueId=""){
   let issue = issueId ? obj(data.bondIssues)[issueId] : null;
@@ -4469,34 +6031,325 @@ window.saveBondRate = async function(){
   await dbSet("settings/bondRate", rate);
   toast("채권 금리 저장 완료");
 }
-window.setStudentTab = function(tab){ studentTab=tab; localStorage.setItem("studentTab",tab); render(); }
+window.setStudentTab = function(tab){
+  studentTab=tab;
+  activeMobilePage="";
+  localStorage.setItem("studentTab",tab);
+  localStorage.removeItem("activeMobilePage");
+  render();
+}
+window.setStudentNoticeTab = async function(tab){
+  selectedNoticeStudentTab=tab;
+  localStorage.setItem("studentNoticeTab",tab);
+  selectedStudentNoticeDetail="";
+  localStorage.removeItem("studentNoticeDetail");
+  if(tab==="message" && selectedStudent){
+    const roomId=`room_${selectedStudent}`;
+    await markRoomMessagesRead(roomId,"student").catch(()=>{});
+    await dbUpdate(`teacherMessageRooms/${roomId}`,{unreadByStudent:0,updatedAt:seoulIsoString()}).catch(()=>{});
+  }else{
+    noticeState.messages=[];
+  }
+  render();
+}
+window.openStudentNoticeDetail = function(id){
+  selectedStudentNoticeDetail=id;
+  localStorage.setItem("studentNoticeDetail",id);
+  render();
+}
+window.closeStudentNoticeDetail = function(){
+  selectedStudentNoticeDetail="";
+  localStorage.removeItem("studentNoticeDetail");
+  render();
+}
+window.setTeacherNoticeTab = function(tab){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  selectedTeacherNoticeTab=tab;
+  localStorage.setItem("teacherNoticeTab",tab);
+  if(tab!=="messages"){
+    selectedTeacherMessageRoom="";
+    localStorage.removeItem("teacherMessageRoom");
+    noticeState.messages=[];
+  }
+  render();
+}
+window.setNoticeUncheckedOnly = function(checked){if(!requireTeacherAccess()) return; noticeUncheckedOnly=!!checked; render();}
+window.setTeacherMessageSearch = function(value){if(!requireTeacherAccess()) return; teacherMessageSearch=String(value||""); render();}
+window.updateNoticeTypeFields = function(){
+  const type=document.getElementById("noticeType")?.value || "notice";
+  document.getElementById("noticeCheckItemsBox")?.classList.toggle("hidden",!["homework","material"].includes(type));
+}
+window.fillNoticeCheckPreset = function(kind){
+  const el=document.getElementById("noticeCheckItems");
+  if(!el) return;
+  el.value = kind==="material" ? "교과서\n공책\n필통" : "교과서 문제 풀기\n공책 정리하기\n부모님 확인 받기";
+}
+window.resetNoticeForm = function(){
+  ["noticeTitle","noticeContent","noticeCheckItems"].forEach(id=>{const el=document.getElementById(id); if(el) el.value="";});
+  const due=document.getElementById("noticeDueDate"); if(due) due.value=today();
+  const type=document.getElementById("noticeType"); if(type) type.value="notice";
+  const important=document.getElementById("noticeImportant"); if(important) important.checked=false;
+  const target=document.getElementById("noticeTargetType"); if(target) target.value="all";
+  document.querySelectorAll(".noticeTargetStudent").forEach(el=>{el.checked=false;});
+  document.getElementById("noticeTargetStudents")?.classList.add("hidden");
+  updateNoticeTypeFields();
+  const hint=document.getElementById("noticeSaveHint"); if(hint) hint.textContent="등록 버튼을 누르면 즉시 알림장에 저장됩니다.";
+}
+window.openTeacherNoticeDetail = function(id){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  selectedTeacherNoticeDetail=id;
+  localStorage.setItem("teacherNoticeDetail",id);
+  render();
+}
+window.closeTeacherNoticeDetail = function(){
+  selectedTeacherNoticeDetail="";
+  localStorage.removeItem("teacherNoticeDetail");
+  render();
+}
+
+window.saveClassroomNotice = async function(){
+  if(!requireTeacherAccess()) return;
+  const title=String(document.getElementById("noticeTitle")?.value||"").trim();
+  const content=String(document.getElementById("noticeContent")?.value||"").trim();
+  const type=document.getElementById("noticeType")?.value || "notice";
+  const targetType=document.getElementById("noticeTargetType")?.value || "all";
+  const targetStudentIds=targetType==="selected" ? Array.from(document.querySelectorAll(".noticeTargetStudent:checked")).map(el=>el.value).filter(Boolean) : [];
+  const due=document.getElementById("noticeDueDate")?.value || today();
+  const important=!!document.getElementById("noticeImportant")?.checked;
+  const checkItems=["homework","material"].includes(type)
+    ? String(document.getElementById("noticeCheckItems")?.value||"").split(/\n+/).map(x=>x.trim()).filter(Boolean).slice(0,20)
+    : [];
+  if(!title) return toast("제목을 입력하세요.");
+  if(!NOTICE_TYPES.some(t=>t.id===type)) return toast("알림 유형을 다시 선택하세요.");
+  if(targetType==="selected" && !targetStudentIds.length) return toast("대상 학생을 선택하세요.");
+  const btns=[...document.querySelectorAll('.noticeSubmitBtn, button[onclick="saveClassroomNotice()"]')];
+  const hint=document.getElementById("noticeSaveHint");
+  btns.forEach(btn=>{btn.disabled=true; btn.dataset.oldText=btn.textContent; btn.textContent="등록 중...";});
+  if(hint) hint.textContent="Firebase에 저장하는 중입니다...";
+  const id=txid();
+  const nowText=seoulIsoString();
+  const notice={
+    id,title,content,type,targetType,targetStudentIds,
+    dueDate:due,
+    important,checkItems,createdBy:TEACHER_ID,createdAt:nowText,updatedAt:nowText,deleted:false
+  };
+  try{
+    await dbUpdate("",{[`classroomNotices/${id}`]:notice});
+    // Realtime Database 반영이 늦어도 교사 화면에는 즉시 보이게 로컬 상태도 보강한다.
+    if(!noticeState.all.some(nc=>nc.id===id)) noticeState.all=[notice,...noticeState.all];
+    toast("알림 등록 완료");
+    resetNoticeForm();
+    selectedTeacherNoticeTab="list";
+    localStorage.setItem("teacherNoticeTab","list");
+    if(hint) hint.textContent="등록 완료. 알림 목록으로 이동합니다.";
+  }catch(e){
+    console.error("notice save failed", e);
+    const msg=e?.code ? `${e.code}: ${e.message || e}` : (e?.message || String(e));
+    if(hint) hint.textContent=`등록 실패: ${msg}`;
+    toast(`알림 등록 실패: ${msg}`);
+  }finally{
+    btns.forEach(btn=>{btn.disabled=false; btn.textContent=btn.dataset.oldText || "알림 등록"; delete btn.dataset.oldText;});
+    render();
+  }
+}
+
+window.editClassroomNotice = async function(id){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  const nc=noticeState.all.find(n=>n.id===id);
+  if(!nc) return toast("알림을 찾을 수 없습니다.");
+  const title=prompt("제목",nc.title||""); if(title===null) return;
+  const content=prompt("내용",nc.content||""); if(content===null) return;
+  const due=prompt("마감일/행사일 YYYY-MM-DD",noticeDateValue(nc.dueDate)||today()); if(due===null) return;
+  try{
+    await dbUpdate(`classroomNotices/${id}`,{
+      title:String(title).trim()||nc.title,
+      content:String(content).trim(),
+      dueDate:due || today(),
+      updatedAt:seoulIsoString()
+    });
+    toast("알림 수정 완료");
+  }catch(e){
+    console.error("notice edit failed", e);
+    toast(`알림 수정 실패: ${e.message || e}`);
+  }
+}
+window.deleteClassroomNotice = async function(id){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  if(!confirm("이 알림을 삭제할까요?")) return;
+  try{
+    await dbUpdate(`classroomNotices/${id}`,{deleted:true,updatedAt:seoulIsoString()});
+    toast("알림 삭제 완료");
+  }catch(e){
+    console.error("notice delete failed", e);
+    toast(`알림 삭제 실패: ${e.message || e}`);
+  }
+}
+window.checkNotice = async function(noticeId,studentId){
+  if(studentId!==selectedStudent) return toast("내 알림만 체크할 수 있습니다.");
+  const nc=noticeState.student.find(n=>n.id===noticeId);
+  if(!nc || !noticeAppliesToStudent(nc,studentId)) return toast("체크할 알림을 찾을 수 없습니다.");
+  const previous=statusForNoticeStudent(noticeId,studentId);
+  if(previous?.teacherConfirmed) return toast("이미 선생님 확인이 완료되었습니다.");
+  const id=statusDocId(noticeId,studentId);
+  try{
+    await dbSet(`classroomNoticeStatus/${id}`,{
+      id,noticeId,studentId,checked:true,checkedAt:seoulIsoString(),
+      status:"self_checked"
+    });
+    toast("체크 완료");
+  }catch(e){
+    console.error("notice check failed", e);
+    toast(`체크 실패: ${e.message || e}`);
+  }
+}
+window.confirmNoticeStatus = async function(noticeId,studentId){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  const id=statusDocId(noticeId,studentId);
+  const previous=obj(obj(data.classroomNoticeStatus)[id]);
+  try{
+    await dbSet(`classroomNoticeStatus/${id}`,{
+      ...previous,id,noticeId,studentId,checked:true,
+      checkedAt:previous.checkedAt || seoulIsoString(),
+      teacherConfirmed:true,teacherConfirmedAt:seoulIsoString(),status:"confirmed"
+    });
+    toast("교사 확인 완료");
+  }catch(e){
+    console.error("notice confirm failed", e);
+    toast(`교사 확인 실패: ${e.message || e}`);
+  }
+}
+async function ensureStudentRoom(studentId){
+  const roomId=`room_${studentId}`;
+  const previous=obj(obj(data.teacherMessageRooms)[roomId]);
+  await dbSet(`teacherMessageRooms/${roomId}`,{
+    ...previous,id:roomId,studentId,studentName:studentName(studentId),teacherId:TEACHER_ID,
+    createdAt:previous.createdAt || seoulIsoString(),updatedAt:seoulIsoString(),closed:false,
+    unreadByTeacher:n(previous.unreadByTeacher),unreadByStudent:n(previous.unreadByStudent)
+  });
+  return roomId;
+}
+async function markRoomMessagesRead(roomId,readerRole){
+  const updates={};
+  noticeRecordList("teacherMessages").forEach(m=>{
+    if(m.roomId!==roomId || m.deleted) return;
+    if(readerRole==="teacher" && m.senderRole==="student" && !m.readByTeacher){
+      updates[`teacherMessages/${m.id}/readByTeacher`]=true;
+    }
+    if(readerRole==="student" && m.senderRole==="teacher" && !m.readByStudent){
+      updates[`teacherMessages/${m.id}/readByStudent`]=true;
+    }
+  });
+  if(Object.keys(updates).length) await dbUpdate("",updates);
+}
+window.sendStudentTeacherMessage = async function(){
+  if(!selectedStudent) return toast("학생 로그인이 필요합니다.");
+  const nowMs=Date.now();
+  if(nowMs-lastStudentMessageSentAt<10000) return toast("메시지는 10초에 한 번씩 보낼 수 있습니다.");
+  const el=document.getElementById("studentTeacherMessageText");
+  const text=String(el?.value||"").trim();
+  if(!text) return toast("메시지를 입력하세요.");
+  if(text.length>300) return toast("메시지는 300자 이내로 입력하세요.");
+  const roomId=await ensureStudentRoom(selectedStudent);
+  const msgId=txid();
+  const room=obj(obj(data.teacherMessageRooms)[roomId]);
+  try{
+    await dbUpdate("",{
+      [`teacherMessages/${msgId}`]:{
+        id:msgId,roomId,senderId:selectedStudent,senderName:studentName(selectedStudent),senderRole:"student",
+        text,createdAt:seoulIsoString(),readByTeacher:false,readByStudent:true,deleted:false
+      },
+      [`teacherMessageRooms/${roomId}/studentId`]:selectedStudent,
+      [`teacherMessageRooms/${roomId}/studentName`]:studentName(selectedStudent),
+      [`teacherMessageRooms/${roomId}/teacherId`]:TEACHER_ID,
+      [`teacherMessageRooms/${roomId}/lastMessage`]:text,
+      [`teacherMessageRooms/${roomId}/lastMessageAt`]:seoulIsoString(),
+      [`teacherMessageRooms/${roomId}/lastSenderRole`]:"student",
+      [`teacherMessageRooms/${roomId}/unreadByTeacher`]:n(room.unreadByTeacher)+1,
+      [`teacherMessageRooms/${roomId}/unreadByStudent`]:0,
+      [`teacherMessageRooms/${roomId}/updatedAt`]:seoulIsoString(),
+      [`teacherMessageRooms/${roomId}/closed`]:false
+    });
+    lastStudentMessageSentAt=nowMs;
+    if(el) el.value="";
+    toast("메시지 전송 완료");
+  }catch(e){
+    console.error("student message failed", e);
+    toast(`메시지 전송 실패: ${e.message || e}`);
+  }
+}
+window.openTeacherMessageRoom = async function(roomId){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  if(!noticeState.rooms.some(r=>r.id===roomId)) return toast("메시지방을 찾을 수 없습니다.");
+  selectedTeacherMessageRoom=roomId;
+  localStorage.setItem("teacherMessageRoom",roomId);
+  await markRoomMessagesRead(roomId,"teacher").catch(()=>{});
+  await dbUpdate(`teacherMessageRooms/${roomId}`,{unreadByTeacher:0,updatedAt:seoulIsoString()}).catch(()=>{});
+  render();
+}
+window.sendTeacherReply = async function(){
+  if(!isTeacherMode()) return toast("교사 권한이 필요합니다.");
+  const room=noticeState.rooms.find(r=>r.id===selectedTeacherMessageRoom);
+  if(!room) return toast("메시지방을 선택하세요.");
+  const el=document.getElementById("teacherReplyText");
+  const text=String(el?.value||"").trim();
+  if(!text) return toast("답장을 입력하세요.");
+  if(text.length>300) return toast("답장은 300자 이내로 입력하세요.");
+  const msgId=txid();
+  try{
+    await dbUpdate("",{
+      [`teacherMessages/${msgId}`]:{
+        id:msgId,roomId:room.id,senderId:TEACHER_ID,senderName:"선생님",senderRole:"teacher",
+        text,createdAt:seoulIsoString(),readByTeacher:true,readByStudent:false,deleted:false
+      },
+      [`teacherMessageRooms/${room.id}/lastMessage`]:text,
+      [`teacherMessageRooms/${room.id}/lastMessageAt`]:seoulIsoString(),
+      [`teacherMessageRooms/${room.id}/lastSenderRole`]:"teacher",
+      [`teacherMessageRooms/${room.id}/unreadByStudent`]:n(room.unreadByStudent)+1,
+      [`teacherMessageRooms/${room.id}/unreadByTeacher`]:0,
+      [`teacherMessageRooms/${room.id}/updatedAt`]:seoulIsoString(),
+      [`teacherMessageRooms/${room.id}/closed`]:false
+    });
+    if(el) el.value="";
+    toast("답장 전송 완료");
+  }catch(e){
+    console.error("teacher reply failed", e);
+    toast(`답장 전송 실패: ${e.message || e}`);
+  }
+}
 function peerDetailHtml(id){
   const s=student(id); if(!s) return `<p class="small">학생을 찾을 수 없습니다.</p>`;
+  const job=studentJobName(s)||"직업 없음";
+  const room=selectedRoomTemplate(id);
   return `<div class="studentDetailGrid peerDetailGrid">
-    <div>
-      <div class="card peerAvatarCard">${avatarPreviewHtml(id)}</div>
-      <div class="card creditDetailCard" style="margin-top:12px">${creditSummaryCard(id)}</div>
-      <div class="card peerProfileCard" style="margin-top:12px">
-        <h3>${s.name}</h3>
-        <p class="small"><b>직업</b> ${studentJobName(s)||"없음"}</p>
-        <p class="small"><b>보유 상품</b> ${inventoryHtml(id)}</p>
-        <p class="small"><b>보유 티켓</b> ${ticketHtml(id)}</p>
-        <p class="small"><b>적용 미니룸</b> ${selectedRoomTemplate(id)?.icon||"🏠"} ${selectedRoomTemplate(id)?.name||"없음"}</p>
+    <div class="peerDetailSide">
+      <div class="peerAvatarCard">${avatarPreviewHtml(id)}</div>
+      <div class="creditDetailCard">${creditSummaryCard(id)}</div>
+      <div class="peerProfileCard">
+        <div class="peerProfileTop">
+          <span>프로필</span>
+          <b>${s.name}</b>
+        </div>
+        <div class="peerInfoList">
+          <div><span>직업</span><b>${job}</b></div>
+          <div><span>보유 상품</span><b>${inventoryHtml(id)}</b></div>
+          <div><span>보유 티켓</span><b>${ticketHtml(id)}</b></div>
+          <div><span>미니룸</span><b>${room?.icon||"🏠"} ${room?.name||"없음"}</b></div>
+        </div>
       </div>
     </div>
-    <div>
-      <div class="section" style="padding:0;margin:0;box-shadow:none;border:0">
+    <div class="peerDetailMain">
+      <section class="peerDataCard peerAssetCard">
         <div class="head"><div><h3>자산 구성</h3><div class="sub">자산 정보는 표 대신 원형 그래프로 봅니다.</div></div></div>
         ${assetPieHtml(id)}
-      </div>
-      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
+      </section>
+      <section class="peerDataCard peerLedgerCard">
         <div class="head"><div><h3>최근 거래 내역</h3><div class="sub">최근 경제 활동 기록입니다.</div></div></div>
         ${studentRecentLedgerHtml(id,25)}
-      </div>
-      <div class="section" style="padding:0;margin-top:12px;box-shadow:none;border:0">
+      </section>
+      <section class="peerDataCard peerIncomeCard">
         <div class="head"><div><h3>일자별 소득</h3><div class="sub">날짜별 입금 합계입니다.</div></div></div>
         ${studentDailyIncomeHtml(id)}
-      </div>
+      </section>
     </div>
   </div>`;
 }
@@ -4629,7 +6482,7 @@ async function doLoanApprove(r,rate,bankerId=""){
 async function addRequest(r){
   if(!validateRequestBalance(r)) return;
   const id="req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
-  await dbSet("requests/"+id,{id,ts:new Date().toISOString(),...r});
+  await dbSet("requests/"+id,{id,ts:seoulIsoString(),...r});
   toast("신청했습니다. 선생님 승인을 기다리세요.");
 }
 window.requestTransfer = async function(){
@@ -4722,9 +6575,28 @@ window.rejectRequest = async function(id){await dbRemove("requests/"+id); toast(
 function historyWithNow(){
   return fullHistoryWithNow().slice(-16);
 }
+function chartCanvasContext(preferredHeight=420){
+  const canvas=document.getElementById('chartCanvas');
+  if(!canvas) return null;
+  const mobile=(typeof isMobileViewport==="function" ? isMobileViewport() : window.innerWidth<=768);
+  const rect=canvas.getBoundingClientRect();
+  const cssW=Math.max(280,Math.round(rect.width || canvas.clientWidth || (mobile?360:900)));
+  const rectH=rect.height || canvas.clientHeight || preferredHeight;
+  const cssH=Math.max(mobile?280:340,Math.min(Math.round(rectH || preferredHeight),mobile?360:540));
+  const dpr=Math.max(1,Math.min(2,window.devicePixelRatio || 1));
+  const nextW=Math.round(cssW*dpr), nextH=Math.round(cssH*dpr);
+  if(canvas.width!==nextW || canvas.height!==nextH){ canvas.width=nextW; canvas.height=nextH; }
+  canvas.style.width='100%';
+  canvas.style.height=cssH+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {canvas,ctx,W:cssW,H:cssH,mobile};
+}
+
 function drawLineChart(series, labels){
-  const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,pad={l:70,r:20,t:20,b:60};
+  const chart=chartCanvasContext(); if(!chart) return;
+  const {ctx,W,H,mobile}=chart;
+  const pad=mobile?{l:52,r:14,t:24,b:52}:{l:70,r:20,t:20,b:60};
   ctx.clearRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
   const vals=series.flatMap(s=>s.values).filter(v=>Number.isFinite(v));
   let min=0,max=Math.max(...vals,1); max=Math.ceil(max/100)*100 || 1;
@@ -4736,13 +6608,14 @@ function drawLineChart(series, labels){
   series.forEach(s=>{ ctx.strokeStyle=s.color; ctx.lineWidth=4; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.beginPath(); s.values.forEach((v,i)=>{const x=xFor(i),y=yFor(v); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke(); s.values.forEach((v,i)=>{ctx.fillStyle=s.color; ctx.beginPath(); ctx.arc(xFor(i),yFor(v),5,0,Math.PI*2); ctx.fill();}); });
 }
 function drawTotalIncomeChart(rows){
-  const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,pad={l:112,r:40,t:46,b:104};
+  const chart=chartCanvasContext(); if(!chart) return;
+  const {ctx,W,H,mobile}=chart;
+  const pad=mobile?{l:56,r:18,t:34,b:58}:{l:96,r:40,t:46,b:92};
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#f8fafc'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#fbfdf9'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
   if(!rows.length){
-    ctx.fillStyle='#64748b'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText('표시할 전체 열매 보유량 기록이 없습니다.',W/2,H/2);
+    ctx.fillStyle='#64748b'; ctx.font=`${mobile?14:22}px system-ui`; ctx.textAlign='center'; ctx.fillText('표시할 전체 열매 보유량 기록이 없습니다.',W/2,H/2);
     return;
   }
   const vals=rows.map(r=>n(r.totalHoldings));
@@ -4752,46 +6625,48 @@ function drawTotalIncomeChart(rows){
   const range=max-min;
   const xFor=i=>pad.l+(W-pad.l-pad.r)*(rows.length===1?0.5:i/(rows.length-1));
   const yFor=v=>pad.t+(H-pad.t-pad.b)*(1-(v-min)/range);
-  ctx.strokeStyle='rgba(148,163,184,.35)'; ctx.lineWidth=1.2; ctx.fillStyle='#475569'; ctx.font='16px system-ui'; ctx.textAlign='right';
-  for(let i=0;i<=6;i++){
-    const y=pad.t+(H-pad.t-pad.b)*i/6;
-    const val=max-range*i/6;
+  ctx.strokeStyle='rgba(143,159,132,.32)'; ctx.lineWidth=1; ctx.fillStyle='#6b7466'; ctx.font=`${mobile?10:13}px system-ui`; ctx.textAlign='right';
+  const gridCount=mobile?4:6;
+  for(let i=0;i<=gridCount;i++){
+    const y=pad.t+(H-pad.t-pad.b)*i/gridCount;
+    const val=max-range*i/gridCount;
     ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
-    ctx.fillText(Math.round(val).toLocaleString('ko-KR'),pad.l-12,y+5);
+    ctx.fillText(Math.round(val).toLocaleString('ko-KR'),pad.l-7,y+4);
   }
-  ctx.strokeStyle='#2563eb'; ctx.lineWidth=7; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='#2f6df6'; ctx.lineWidth=mobile?4:7; ctx.lineJoin='round'; ctx.lineCap='round';
   ctx.beginPath();
   rows.forEach((r,i)=>{const x=xFor(i), y=yFor(r.totalHoldings); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);});
   ctx.stroke();
   rows.forEach((r,i)=>{
     const x=xFor(i), y=yFor(r.totalHoldings);
-    ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='#2563eb'; ctx.lineWidth=4; ctx.stroke();
+    ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,mobile?5:8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#2f6df6'; ctx.lineWidth=mobile?2.5:4; ctx.stroke();
   });
-  const labelEvery=Math.max(1,Math.ceil(rows.length/10));
+  const labelLimit=mobile?4:9;
+  const labelEvery=Math.max(1,Math.ceil(rows.length/labelLimit));
   rows.forEach((r,i)=>{
     if(i%labelEvery!==0 && i!==rows.length-1) return;
-    ctx.save(); ctx.translate(xFor(i),H-62); ctx.rotate(-Math.PI/4);
-    ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='right';
-    ctx.fillText(r.day.slice(5).replace('-','/'),0,0);
-    ctx.restore();
+    ctx.fillStyle='#596552'; ctx.font=`${mobile?10:12}px system-ui`; ctx.textAlign='center';
+    ctx.fillText(r.day.slice(5).replace('-','/'),xFor(i),H-(mobile?18:28));
   });
   const last=rows[rows.length-1];
   const prev=rows[rows.length-2];
   const diff=prev ? n(last.totalHoldings)-n(prev.totalHoldings) : 0;
   const rate=prev && n(prev.totalHoldings)>0 ? diff/n(prev.totalHoldings)*100 : 0;
-  ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='left';
-  ctx.fillText('전체 열매 = 학생 지갑 + 예금 + 적금 + 채권 + 단체 현금',pad.l,H-24);
-  ctx.textAlign='right'; ctx.font='800 16px system-ui';
+  ctx.textAlign='right'; ctx.font=`800 ${mobile?12:15}px system-ui`;
   ctx.fillStyle=diff>=0?'#16a34a':'#dc2626';
-  ctx.fillText(`최근 ${won(last.totalHoldings)} · ${signedWon(diff)} (${pct(rate)})`,W-pad.r,H-24);
+  ctx.fillText(`최근 ${won(last.totalHoldings)} · ${signedWon(diff)} (${pct(rate)})`,W-pad.r,pad.t-12);
+  if(!mobile){
+    ctx.fillStyle='#334155'; ctx.font='13px system-ui'; ctx.textAlign='left';
+    ctx.fillText('전체 열매 = 학생 지갑 + 예금 + 적금 + 채권 + 단체 현금',pad.l,H-28);
+  }
 }
 function showTotalIncomeChart(limit=null){
   const rows=economyHistoryRows(limit || null);
   document.getElementById('chartTitle').textContent='전체 열매 보유량 변화';
   document.getElementById('chartSub').textContent='날짜별 전체 보유량, 전날 대비 변화량, 등락률을 확인합니다.';
-  drawTotalIncomeChart(rows);
   document.getElementById('chartModal').classList.remove('hidden');
+  requestAnimationFrame(()=>drawTotalIncomeChart(rows));
 }
 window.showEconomyHelp = function(){
   const title=document.getElementById("detailTitle");
@@ -4819,35 +6694,41 @@ window.showCreditHelp = function(){
   const body=document.getElementById("detailBody");
   if(title) title.textContent="신용도 도움말";
   if(sub) sub.textContent="경제교실에서 돈·약속·역할을 얼마나 믿고 맡길 수 있는지 보여주는 점수";
-  if(body) body.innerHTML=`<div class="economyHelpBox creditHelpBox">
-    <div class="notice"><b>경고와 신용도</b><br>경찰 경고는 신용도에 영향이 있습니다. 심판 경고는 경기/활동 중 주의 기록으로 남지만 신용도 계산에는 사용하지 않습니다.</div>
-    <p><b>신용도</b>는 벌점이 아니라, 경제교실에서 돈·약속·역할을 믿고 맡길 수 있는 정도입니다.</p>
-    <div class="scroll"><table><thead><tr><th>등급</th><th>점수</th><th>의미</th></tr></thead><tbody>
-      <tr><td><b>S</b></td><td>900~1000</td><td>매우 신뢰 가능</td></tr>
-      <tr><td><b>A</b></td><td>800~899</td><td>신뢰 높음</td></tr>
-      <tr><td><b>B</b></td><td>700~799</td><td>보통</td></tr>
-      <tr><td><b>C</b></td><td>600~699</td><td>주의</td></tr>
-      <tr><td><b>D</b></td><td>500~599</td><td>위험</td></tr>
-      <tr><td><b>E</b></td><td>300~499</td><td>신용 제한</td></tr>
-    </tbody></table></div>
-    <h3>신용도가 내려가는 경우</h3>
-    <ol>
-      <li>경고를 받거나 같은 문제가 반복될 때</li>
-      <li>직업 역할을 하지 않아 직무유기 단계가 올라갈 때</li>
-      <li>벌금을 기한 안에 내지 않거나 미납 벌금이 남아 있을 때</li>
-      <li>세금 회피, 거래 약속 불이행, 법인 돈 사적 사용처럼 경제 약속을 어길 때</li>
-      <li>대출을 많이 사용해 갚아야 할 부담이 커질 때</li>
-    </ol>
-    <h3>신용도를 회복하는 방법</h3>
-    <ol>
-      <li>며칠 동안 경고 없이 생활하기</li>
-      <li>직업 역할을 성실하게 수행하기</li>
-      <li>벌금과 미납금을 납부하기</li>
-      <li>거래 약속, 세금 납부, 법인 회계 기록을 정확히 지키기</li>
-      <li>예금·적금·채권처럼 책임 있는 금융활동을 꾸준히 유지하기</li>
-    </ol>
-    <p>한 번 실수했다고 끝나는 것은 아닙니다. 성실하게 생활하고 미납금을 해결하면 신용도는 다시 올라갑니다.</p>
-    <p class="small">현재 신용도는 자산, 최근 소득, 경고 기록, 직무유기, 세금 적발, 대출 부담, 미납 벌금, 성실 회복 기록을 종합해 계산합니다.</p>
+  if(body) body.innerHTML=`<div class="economyHelpBox creditHelpBox creditHelpBoxV119">
+    <div class="notice creditHelpNoticeV119"><b>경고와 신용도</b><span>경찰 경고는 신용도에 영향이 있습니다. 심판 경고는 경기/활동 중 주의 기록으로 남지만 신용도 계산에는 사용하지 않습니다.</span></div>
+    <p class="creditHelpLeadV119"><b>신용도</b>는 벌점이 아니라, 경제교실에서 돈·약속·역할을 믿고 맡길 수 있는 정도입니다.</p>
+    <div class="creditGradeGridV119" aria-label="신용도 등급표">
+      <div class="creditGradeCardV119 top"><b>S</b><span>900~1000</span><em>매우 신뢰 가능</em></div>
+      <div class="creditGradeCardV119 good"><b>A</b><span>800~899</span><em>신뢰 높음</em></div>
+      <div class="creditGradeCardV119 normal"><b>B</b><span>700~799</span><em>보통</em></div>
+      <div class="creditGradeCardV119 warn"><b>C</b><span>600~699</span><em>주의</em></div>
+      <div class="creditGradeCardV119 danger"><b>D</b><span>500~599</span><em>위험</em></div>
+      <div class="creditGradeCardV119 danger"><b>E</b><span>300~499</span><em>신용 제한</em></div>
+    </div>
+    <div class="creditHelpTwoColV119">
+      <section class="creditHelpPanelV119">
+        <h3>신용도가 내려가는 경우</h3>
+        <ol>
+          <li>경고를 받거나 같은 문제가 반복될 때</li>
+          <li>직업 역할을 하지 않아 직무유기 단계가 올라갈 때</li>
+          <li>벌금을 기한 안에 내지 않거나 미납 벌금이 남아 있을 때</li>
+          <li>세금 회피, 거래 약속 불이행, 법인 돈 사적 사용처럼 경제 약속을 어길 때</li>
+          <li>대출을 많이 사용해 갚아야 할 부담이 커질 때</li>
+        </ol>
+      </section>
+      <section class="creditHelpPanelV119">
+        <h3>신용도를 회복하는 방법</h3>
+        <ol>
+          <li>며칠 동안 경고 없이 생활하기</li>
+          <li>직업 역할을 성실하게 수행하기</li>
+          <li>벌금과 미납금을 납부하기</li>
+          <li>거래 약속, 세금 납부, 법인 회계 기록을 정확히 지키기</li>
+          <li>예금·적금·채권처럼 책임 있는 금융활동을 꾸준히 유지하기</li>
+        </ol>
+      </section>
+    </div>
+    <p class="creditHelpClosingV119">한 번 실수했다고 끝나는 것은 아닙니다. 성실하게 생활하고 미납금을 해결하면 신용도는 다시 올라갑니다.</p>
+    <p class="small creditHelpSmallV119">현재 신용도는 자산, 최근 소득, 경고 기록, 직무유기, 세금 적발, 대출 부담, 미납 벌금, 성실 회복 기록을 종합해 계산합니다.</p>
   </div>`;
   document.getElementById("detailModal")?.classList.remove("hidden");
 }
@@ -4868,8 +6749,9 @@ function dailyProductCandles(productId){
   return Object.values(days).sort((a,b)=>a.day.localeCompare(b.day)).slice(-16);
 }
 function drawCandles(candles){
-  const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,pad={l:96,r:34,t:42,b:104};
+  const chart=chartCanvasContext(); if(!chart) return;
+  const {ctx,W,H,mobile}=chart;
+  const pad=mobile?{l:56,r:18,t:32,b:64}:{l:96,r:34,t:42,b:104};
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H);
   ctx.fillStyle='#111827'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
@@ -4922,8 +6804,8 @@ function showProductChart(productId){
   const candles=dailyProductCandles(productId);
   const latest=candles[candles.length-1];
   document.getElementById('chartSub').textContent = latest ? `일자별 시가·고가·저가·종가 · 최근 종가 ${won(latest.close)}` : '일자별 시가·고가·저가·종가';
-  drawCandles(candles);
   document.getElementById('chartModal').classList.remove('hidden');
+  requestAnimationFrame(()=>drawCandles(candles));
 }
 function dailyTicketPriceRows(ticketId,limit=30){
   const days={};
@@ -4944,8 +6826,9 @@ function dailyTicketPriceRows(ticketId,limit=30){
   return Object.values(days).sort((a,b)=>a.day.localeCompare(b.day)).slice(limit ? -limit : undefined);
 }
 function drawTicketLineChart(rows,ticketId){
-  const canvas=document.getElementById('chartCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,pad={l:112,r:44,t:50,b:118};
+  const chart=chartCanvasContext(); if(!chart) return;
+  const {ctx,W,H,mobile}=chart;
+  const pad=mobile?{l:56,r:18,t:34,b:64}:{l:112,r:44,t:50,b:118};
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
   ctx.fillStyle='#f8fafc'; ctx.fillRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
@@ -4986,11 +6869,13 @@ function drawTicketLineChart(rows,ticketId){
     ctx.restore();
   });
   const last=rows[rows.length-1];
-  ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='left';
-  ctx.fillText('선 그래프: 하루 한 번 정해지는 티켓 가격에 맞춘 표시입니다.',pad.l,H-28);
-  ctx.textAlign='right'; ctx.font='800 16px system-ui';
+  if(!mobile){
+    ctx.fillStyle='#334155'; ctx.font='15px system-ui'; ctx.textAlign='left';
+    ctx.fillText('선 그래프: 하루 한 번 정해지는 티켓 가격에 맞춘 표시입니다.',pad.l,H-28);
+  }
+  ctx.textAlign='right'; ctx.font=`800 ${mobile?12:16}px system-ui`;
   ctx.fillStyle=n(last.change)>=0?'#16a34a':'#dc2626';
-  ctx.fillText(`${won(last.close)} · ${signedWon(last.change)} (${pct(last.changeRate)}) · 구매 ${n(last.buyOrders)} / 판매 ${n(last.sellOrders)}`,W-pad.r,H-28);
+  ctx.fillText(`${won(last.close)} · ${signedWon(last.change)} (${pct(last.changeRate)})${mobile?'':` · 구매 ${n(last.buyOrders)} / 판매 ${n(last.sellOrders)}`}`,W-pad.r,mobile?pad.t-12:H-28);
 }
 function showTicketChart(ticketId){
   const m=ticketMeta[ticketId];
@@ -4998,8 +6883,8 @@ function showTicketChart(ticketId){
   const latest=rows[rows.length-1];
   document.getElementById('chartTitle').textContent=`${m.name} 가격 차트`;
   document.getElementById('chartSub').textContent=latest ? `${latest.day} 현재 ${won(latest.close)} · ${signedWon(latest.change)} / ${pct(latest.changeRate)} · 구매신청 ${n(latest.buyOrders)}명 · 판매신청 ${n(latest.sellOrders)}명` : '날짜별 티켓 가격';
-  drawTicketLineChart(rows,ticketId);
   document.getElementById('chartModal').classList.remove('hidden');
+  requestAnimationFrame(()=>drawTicketLineChart(rows,ticketId));
 }
 function hideChart(){ document.getElementById('chartModal').classList.add('hidden'); }
 
@@ -5017,8 +6902,8 @@ window.showAvatarPreviewLarge = function(itemId){
   const body=document.getElementById("detailBody");
   if(title) title.textContent=it.name;
   if(sub) sub.textContent=`${cosmeticRarityLabel(it)} · ${won(cosmeticPrice(it))}`;
-  const fullAvatarHtml = it.src
-    ? `<img class="largeAvatarFullImg" src="${it.src}" alt="${it.name}">`
+  const fullAvatarHtml = avatarImageSrc(it)
+    ? `<img class="largeAvatarFullImg" src="${avatarImageSrc(it)}" alt="${it.name}">`
     : itemThumb(it);
   if(body) body.innerHTML=`<div class="largeAvatarPreview fullAvatarModal"><div class="largeAvatarStage">${fullAvatarHtml}</div><div class="largeAvatarInfo"><h3>${it.name}</h3><p class="small">전체 아바타를 큰 화면에서 확인한 뒤 구매하거나 바로 적용할 수 있습니다.</p><div class="toolbar"><span class="pill ${rarityPillClass(it.rarity)}">${cosmeticRarityLabel(it)}</span><span class="pill">${owned?"보유중":"미보유"}</span><span class="pill blue">${won(cosmeticPrice(it))}</span></div>${avatarCreatorLineHtml(it)}<div class="toolbar" style="margin-top:14px">${actionHtml}<button onclick="hideStudentDetail()">닫기</button></div></div></div>`;
   document.getElementById("detailModal")?.classList.remove("hidden");
@@ -5053,6 +6938,7 @@ async function buyAvatarItem(studentId,itemId){
 buyAvatarItem = async function(studentId,itemId){
   const it=avatarItemById(itemId);
   if(!it) return;
+  if(isAvatarHidden(itemId)) return toast("현재 상점에서 숨겨진 아바타입니다.");
   if(ownedAvatarCount(studentId,itemId)>0) return toast("이미 보유 중입니다.");
   const price=cosmeticPrice(it);
   if(!requireCash(studentId,price)) return;
@@ -5304,6 +7190,7 @@ window.createProductListing = async function(){
   updates[`marketListings/${id}`]=listing;
   updates[`inventories/${seller}/${pid}`]=current-qty;
   await dbUpdate("",updates);
+  hideStudentDetail();
   toast("상품 판매 등록 완료");
 }
 window.createTicketListing = async function(){
@@ -5319,6 +7206,7 @@ window.createTicketListing = async function(){
   updates[`marketListings/${id}`]=listing;
   updates[`ticketHoldings/${seller}/${tid}`]=current-1;
   await dbUpdate("",updates);
+  hideStudentDetail();
   toast("티켓 판매 등록 완료");
 }
 window.createCustomListing = async function(){
@@ -5331,6 +7219,7 @@ window.createCustomListing = async function(){
   const id=marketListingId();
   const listing={id,status:"open",kind:"custom",category,sellerId:seller,name,qty:1,price,note,createdAt:new Date().toISOString()};
   await dbSet("marketListings/"+id,listing);
+  hideStudentDetail();
   toast("자유 거래 등록 완료");
 }
 async function createIndustryListing(kind){
@@ -5350,6 +7239,7 @@ async function createIndustryListing(kind){
   updates[`marketListings/${id}`]=listing;
   updates[`industryInventories/${seller}/${item.id}`]=industryQty(seller,item.id)-qty;
   await dbUpdate("",updates);
+  hideStudentDetail();
   toast(`${item.name} 판매 등록 완료`);
 }
 window.createIndustryMaterialListing = async function(){ await createIndustryListing("industryMaterial"); }
@@ -5371,6 +7261,7 @@ window.createJobListing = async function(){
   updates[`students/${seller}/job`]=jobNamesFromIds(remaining);
   if(s.jobId===jobId) updates[`students/${seller}/jobId`]=null;
   await dbUpdate("",updates);
+  hideStudentDetail();
   toast("직업 판매 등록 완료");
 }
 window.cancelMarketListing = async function(id){
@@ -5721,7 +7612,7 @@ window.buyShareSellOrder = async function(orderId){
   const shareTxId=`sharetx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
   const ledgerId=`tx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
   const repHistoryId=`rep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
-  const txTime=new Date().toISOString();
+  const txTime=seoulIsoString();
   await runTransaction(rootRef, root=>{
     if(!root) return root;
     const o=root.shareSellOrders?.[orderId];
@@ -5882,6 +7773,26 @@ window.saveAvatarCreator = async function(itemId){
   await dbUpdate("",{[`avatarCreators/${itemId}`]:creator || null});
   toast(creator ? `제작자를 ${studentName(creator)}로 저장했습니다.` : "제작자 연결을 해제했습니다.");
 }
+window.saveAvatarImage = async function(itemId){
+  const item=avatarItemById(itemId);
+  if(!item) return toast("아바타를 찾을 수 없습니다.");
+  const src=String(document.getElementById(`avatarSrc_${itemId}`)?.value || "").trim();
+  if(!src) return toast("이미지 URL을 입력하세요.");
+  const updated={...item,id:itemId,type:"avatar",src};
+  await dbUpdate("",{[`avatarItems/${itemId}`]:updated});
+  toast("기존 아바타 이미지가 저장되었습니다.");
+}
+window.saveAvatarVisibility = async function(itemId,visible){
+  if(!avatarItemById(itemId)) return toast("아바타를 찾을 수 없습니다.");
+  await dbUpdate("",{[`hiddenAvatars/${itemId}`]:visible ? null : true});
+  toast(visible ? "아바타를 상점에 표시합니다." : "아바타를 상점에서 숨겼습니다.");
+}
+window.setStudentTabVisibility = async function(tabId,visible){
+  if(tabId==="dashboard") return toast("대시보드는 기본 화면이라 숨길 수 없습니다.");
+  if(!studentTabCatalog().some(tab=>tab.id===tabId)) return toast("학생 메뉴를 찾을 수 없습니다.");
+  await dbUpdate("",{[`settings/hiddenStudentTabs/${tabId}`]:visible ? null : true});
+  toast(visible ? "학생 화면에 표시합니다." : "학생 화면에서 숨겼습니다.");
+}
 window.deleteManagedAvatar = async function(itemId){
   if(!isDatabaseAvatar(itemId)) return toast("화면에서 등록한 아바타만 삭제할 수 있습니다.");
   if(!confirm("이 아바타를 삭제할까요? 이미 보유한 기록은 남지만 상점에서는 사라집니다.")) return;
@@ -5928,6 +7839,40 @@ window.cleanOldRequests = async function(hours=24){
   await dbUpdate("",updates);
   toast("오래된 신청 정리 완료");
 }
+
+window.openRankStudent = function(id){
+  if(isMobileViewport()){
+    activeMobilePage=`peer_${id}`;
+    localStorage.setItem("activeMobilePage",activeMobilePage);
+    studentTab="more";
+    localStorage.setItem("studentTab",studentTab);
+    render();
+    return;
+  }
+  showPeerInfo(id);
+}
+window.editStudentStatusMessage = function(id){
+  if(id!==selectedStudent) return toast("내 상태메시지만 수정할 수 있습니다.");
+  window.__editingStudentStatusId=id;
+  render();
+  setTimeout(()=>{
+    const input=document.getElementById("studentStatusMessageInput");
+    if(input){input.focus(); input.select();}
+  },60);
+}
+window.cancelStudentStatusEdit = function(){
+  window.__editingStudentStatusId="";
+  render();
+}
+window.saveStudentStatusMessage = async function(id){
+  if(id!==selectedStudent) return toast("내 상태메시지만 수정할 수 있습니다.");
+  const input=document.getElementById("studentStatusMessageInput");
+  const value=String(input?.value || "").trim().slice(0,30) || "우리 반 함께 성장하는 중";
+  await dbSet(`studentStatusMessages/${id}`, value);
+  window.__editingStudentStatusId="";
+  toast("상태메시지 저장 완료");
+}
+
 window.showStudentDetail = function(id){
   const s=student(id); if(!s) return toast("학생을 찾을 수 없습니다.");
   document.getElementById("detailTitle").textContent=`${s.name} 상세 관리`;
@@ -6012,6 +7957,8 @@ function submitTeacherPassword(){
 }
 
 window.askTeacherPassword=askTeacherPassword;
+window.switchToStudentMode=switchToStudentMode;
+window.switchToTeacherMode=switchToTeacherMode;
 window.closeTeacherLogin=closeTeacherLogin;
 window.submitTeacherPassword=submitTeacherPassword;
 window.showProductChart=showProductChart; window.showTicketChart=showTicketChart; window.showTotalIncomeChart=showTotalIncomeChart; window.hideChart=hideChart;
