@@ -1,5 +1,10 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "hosting": {
+    "site": "economy-44982",
     "public": ".",
     "ignore": [
       "firebase.json",

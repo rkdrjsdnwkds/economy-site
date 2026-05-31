@@ -1,4 +1,4 @@
-﻿:root{--bg:#eef4ff;--ink:#0f172a;--muted:#64748b;--card:#fff;--line:#dbe4f0;--blue:#2563eb;--green:#0f766e;--red:#dc2626;--orange:#f59e0b;--purple:#7c3aed;--dark:#020617;--soft-blue:#dbeafe;--soft-green:#ccfbf1;--soft-red:#fee2e2;--soft-orange:#fef3c7;--soft-purple:#ede9fe}
+:root{--bg:#eef4ff;--ink:#0f172a;--muted:#64748b;--card:#fff;--line:#dbe4f0;--blue:#2563eb;--green:#0f766e;--red:#dc2626;--orange:#f59e0b;--purple:#7c3aed;--dark:#020617;--soft-blue:#dbeafe;--soft-green:#ccfbf1;--soft-red:#fee2e2;--soft-orange:#fef3c7;--soft-purple:#ede9fe}
     :root{--body-bg:linear-gradient(135deg,#e0ecff,#f8fafc,#e7f6f2);--hero-bg:radial-gradient(circle at top left,#1d4ed8 0,#020617 45%,#111827 100%);--radius-hero:28px;--radius-section:22px;--radius-card:20px;--radius-control:14px}
     *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--body-bg);color:var(--ink)}
     button,input,select,textarea{font-family:inherit}button{border:0;border-radius:var(--radius-control);padding:10px 14px;font-weight:900;cursor:pointer;background:#e2e8f0;color:var(--ink)}button:hover{filter:brightness(.97)}button:active{transform:scale(.98)}
@@ -461,6 +461,111 @@ button:disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.35)}
   .miniRoomStage .cleanRoom{height:320px!important}
   .miniRoomCanvas{left:50%!important;transform:translate(-50%,-50%) scale(.68)!important}
   .miniRoomCanvas .staticAvatarImg.small{width:122px!important}
+}
+
+/* v177 mobile nav alignment fix */
+@media (max-width:768px){
+  html body[data-mode="student"] #studentView .tabletContent{
+    padding-bottom:128px!important;
+  }
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar{
+    position:fixed!important;
+    left:50%!important;
+    right:auto!important;
+    bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;
+    transform:translateX(-50%)!important;
+    width:min(430px,calc(100vw - 28px))!important;
+    max-width:calc(100vw - 28px)!important;
+    height:66px!important;
+    min-height:66px!important;
+    max-height:66px!important;
+    box-sizing:border-box!important;
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    align-items:center!important;
+    justify-items:stretch!important;
+    gap:6px!important;
+    margin:0!important;
+    padding:7px!important;
+    overflow:visible!important;
+    border-radius:24px!important;
+    border:1px solid rgba(226,232,240,.95)!important;
+    background:rgba(255,255,255,.96)!important;
+    box-shadow:0 16px 38px rgba(15,23,42,.15)!important;
+    z-index:120!important;
+  }
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"],
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"]{
+    position:relative!important;
+    inset:auto!important;
+    grid-row:auto!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:52px!important;
+    min-height:52px!important;
+    max-height:52px!important;
+    inline-size:auto!important;
+    block-size:52px!important;
+    min-inline-size:0!important;
+    max-inline-size:none!important;
+    min-block-size:52px!important;
+    max-block-size:52px!important;
+    flex:0 1 auto!important;
+    aspect-ratio:auto!important;
+    justify-self:stretch!important;
+    align-self:center!important;
+    place-self:center stretch!important;
+    transform:none!important;
+    margin:0!important;
+    padding:4px 2px!important;
+    border:0!important;
+    border-radius:17px!important;
+    background:transparent!important;
+    color:#64748b!important;
+    box-shadow:none!important;
+    overflow:hidden!important;
+    box-sizing:border-box!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button.active,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button.active,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"].active,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"].active{
+    background:linear-gradient(135deg,#dbeafe,#ede9fe)!important;
+    color:#2563eb!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="finance"]{grid-column:1!important;order:1!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="market"]{grid-column:2!important;order:2!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"]{grid-column:3!important;order:3!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="noticeboard"]{grid-column:4!important;order:4!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="more"]{grid-column:5!important;order:5!important}
+}
+
+/* v174 final: teacher bulk payment selected tiles must stay visible after later card resets */
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"],
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked){
+  border-color:#2563eb!important;
+  background:#eff6ff!important;
+  background-image:none!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.2),0 14px 28px rgba(37,99,235,.16)!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .bulkTxCheck,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"] .bulkTxCheck,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked) .bulkTxCheck{
+  border-color:#2563eb!important;
+  background:#2563eb!important;
+  color:#fff!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .tileName,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"] .tileName,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked) .tileName{
+  color:#1d4ed8!important;
 }
 .priceManageGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;max-height:520px;overflow:auto}
 .priceManageCard{border:1px solid #dbe4f0;border-radius:18px;padding:10px;background:#fff}
@@ -2436,8 +2541,13 @@ body:has(.exactPixelLoginPage) .wrap{
 .creditScoreCard em{display:block;font-style:normal;font-weight:1000;color:#5b3b23}
 .roleWarningMiniList{display:grid;gap:8px}
 .roleWarningMiniList>div{display:grid;grid-template-columns:120px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #ead7b8;border-radius:12px;background:#fffaf0}
+.roleWarningMiniCard{display:grid;grid-template-columns:120px minmax(0,1fr) auto auto;gap:8px;align-items:center;width:100%;padding:9px 10px;border:1px solid #ead7b8;border-radius:12px;background:#fffaf0;color:inherit;text-align:left;cursor:pointer}
+.roleWarningMiniCard:hover{background:#fff3d7;border-color:#f6c76d;transform:translateY(-1px)}
+.roleWarningMiniCard.appealable{border-color:#f59e0b;box-shadow:0 6px 18px rgba(245,158,11,.12)}
 .roleWarningMiniList span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.roleWarningMiniList em{font-style:normal;color:#7b6a58;font-size:12px;font-weight:900}
+.roleWarningMiniList em,.roleWarningMiniCard strong{font-style:normal;color:#7b6a58;font-size:12px;font-weight:900}
+.clickableRow{cursor:pointer}
+.clickableRow:hover{background:#f8fafc}
 .roleAdminGrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr) minmax(260px,.55fr);gap:12px}
 .roleWorkPage{display:grid;gap:14px}
 .rolePanel{border-left:8px solid #2563eb!important}
@@ -2448,7 +2558,7 @@ body:has(.exactPixelLoginPage) .wrap{
 .roleActionGrid textarea{min-height:90px}
 @media(max-width:1000px){
   .creditWarningGrid,.roleAdminGrid,.roleActionGrid{grid-template-columns:1fr}
-  .roleWarningMiniList>div{grid-template-columns:1fr}
+  .roleWarningMiniList>div,.roleWarningMiniCard{grid-template-columns:1fr}
 }
 
 
@@ -2763,6 +2873,193 @@ body:has(.exactPixelLoginPage) .wrap{
 #detailModal .recentLedger,#detailModal .scroll{max-height:360px!important;border:1px solid #e2e8f0!important;border-radius:8px!important;overflow:auto!important;background:#fff!important}
 #detailModal table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;background:#fff!important}
 #detailModal th{position:sticky!important;top:0!important;z-index:2!important;padding:10px!important;border-bottom:1px solid #e2e8f0!important;background:#f8fafc!important;color:#2563eb!important;font-size:12px!important;font-weight:900!important}
+
+/* v164 mobile menu tile refresh: compact matte square tiles */
+@media(max-width:768px){
+  html body #studentView .mobileMenuGrid,
+  html body #teacherView .mobileMenuGrid,
+  html body #studentView .noticeActionGrid,
+  html body #teacherView .noticeActionGrid{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+    align-items:stretch!important;
+  }
+
+  html body #studentView .mobileMenuCard,
+  html body #teacherView .mobileMenuCard,
+  html body #studentView .noticeActionCard,
+  html body #teacherView .noticeActionCard{
+    aspect-ratio:1 / 1!important;
+    min-height:0!important;
+    height:auto!important;
+    width:100%!important;
+    display:grid!important;
+    grid-template-rows:auto auto minmax(0,1fr) auto!important;
+    align-content:start!important;
+    justify-items:start!important;
+    gap:4px!important;
+    padding:9px!important;
+    border-radius:14px!important;
+    border:1px solid #dfe7ef!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-align:left!important;
+    overflow:hidden!important;
+    color:#1f2937!important;
+  }
+
+  html body #studentView .mobileMenuCard:nth-child(n),
+  html body #teacherView .mobileMenuCard:nth-child(n),
+  html body #studentView .noticeActionCard:nth-child(n),
+  html body #teacherView .noticeActionCard:nth-child(n){
+    background:#f8fafc!important;
+    background-image:none!important;
+    border-color:#dfe7ef!important;
+    box-shadow:none!important;
+  }
+
+  html body #studentView .mobileMenuCard[data-card-id="today"],
+  html body #studentView .mobileMenuCard[data-card-id="cash"],
+  html body #teacherView .mobileMenuCard[data-card-id="dashboard"]{background:#f5f7fb!important}
+  html body #studentView .mobileMenuCard[data-card-id="homework"],
+  html body #studentView .mobileMenuCard[data-card-id="deposit"],
+  html body #teacherView .mobileMenuCard[data-card-id="students"]{background:#f4f8fb!important}
+  html body #studentView .mobileMenuCard[data-card-id="material"],
+  html body #studentView .mobileMenuCard[data-card-id="saving"],
+  html body #teacherView .mobileMenuCard[data-card-id="transactions"]{background:#f8f7f3!important}
+  html body #studentView .mobileMenuCard[data-card-id="events"],
+  html body #studentView .mobileMenuCard[data-card-id="investment"],
+  html body #teacherView .mobileMenuCard[data-card-id="noticeboard"]{background:#f7f8f4!important}
+  html body #studentView .mobileMenuCard[data-card-id="message"],
+  html body #studentView .mobileMenuCard[data-card-id="settings"],
+  html body #teacherView .mobileMenuCard[data-card-id="teacherMore"]{background:#f7f6fa!important}
+
+  html body #studentView .mobileMenuCard::before,
+  html body #studentView .mobileMenuCard::after,
+  html body #teacherView .mobileMenuCard::before,
+  html body #teacherView .mobileMenuCard::after,
+  html body #studentView .noticeActionCard::before,
+  html body #studentView .noticeActionCard::after,
+  html body #teacherView .noticeActionCard::before,
+  html body #teacherView .noticeActionCard::after{
+    display:none!important;
+    content:none!important;
+    background:none!important;
+    box-shadow:none!important;
+  }
+
+  html body #studentView .mobileMenuCard .menuCardIcon,
+  html body #studentView .mobileMenuCard > span:first-child,
+  html body #teacherView .mobileMenuCard .menuCardIcon,
+  html body #teacherView .mobileMenuCard > span:first-child,
+  html body #studentView .noticeActionCard > span:first-child,
+  html body #teacherView .noticeActionCard > span:first-child{
+    width:30px!important;
+    height:30px!important;
+    min-width:30px!important;
+    border-radius:10px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    background:#eef3f8!important;
+    background-image:none!important;
+    color:#3b6f8f!important;
+    box-shadow:none!important;
+    font-size:18px!important;
+    font-weight:500!important;
+    line-height:1!important;
+  }
+
+  html body #studentView .mobileMenuCard .msIcon,
+  html body #teacherView .mobileMenuCard .msIcon{
+    font-size:18px!important;
+    font-weight:400!important;
+  }
+
+  html body #studentView .mobileMenuCard b,
+  html body #teacherView .mobileMenuCard b,
+  html body #studentView .noticeActionCard b,
+  html body #teacherView .noticeActionCard b{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    margin:0!important;
+    color:#1f2937!important;
+    font-size:12.5px!important;
+    font-weight:650!important;
+    line-height:1.16!important;
+    letter-spacing:0!important;
+  }
+
+  html body #studentView .mobileMenuCard small,
+  html body #teacherView .mobileMenuCard small,
+  html body #studentView .noticeActionCard small,
+  html body #teacherView .noticeActionCard small{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    margin:0!important;
+    color:#64748b!important;
+    font-size:9.8px!important;
+    font-weight:450!important;
+    line-height:1.18!important;
+    letter-spacing:0!important;
+  }
+
+  html body #studentView .mobileMenuCard em,
+  html body #teacherView .mobileMenuCard em,
+  html body #studentView .noticeActionCard em,
+  html body #teacherView .noticeActionCard em{
+    position:static!important;
+    justify-self:start!important;
+    align-self:end!important;
+    max-width:100%!important;
+    min-height:0!important;
+    margin-top:auto!important;
+    padding:2px 6px!important;
+    border-radius:999px!important;
+    border:1px solid #d7e2ee!important;
+    background:#ffffff!important;
+    color:#475569!important;
+    box-shadow:none!important;
+    font-size:9.5px!important;
+    font-style:normal!important;
+    font-weight:600!important;
+    line-height:1.25!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  html body #studentView .section:has(.mobileMenuGrid),
+  html body #teacherView .section:has(.mobileMenuGrid){
+    padding:10px!important;
+  }
+
+  html body #studentView .section:has(.mobileMenuGrid) .head,
+  html body #teacherView .section:has(.mobileMenuGrid) .head{
+    margin-bottom:8px!important;
+  }
+
+  html body #studentView .section:has(.mobileMenuGrid) .head h2,
+  html body #teacherView .section:has(.mobileMenuGrid) .head h2{
+    font-size:24px!important;
+    line-height:1.05!important;
+    font-weight:800!important;
+  }
+
+  html body #studentView .section:has(.mobileMenuGrid) .head .sub,
+  html body #teacherView .section:has(.mobileMenuGrid) .head .sub{
+    font-size:13px!important;
+    line-height:1.25!important;
+    font-weight:600!important;
+  }
+}
 #detailModal td{padding:10px!important;border-bottom:1px solid #f1f5f9!important;color:#334155!important;font-size:13px!important}
 #detailModal tr:hover td{background:#f8fafc!important}
 #detailModal .ledgerPlus{color:#047857!important}
@@ -2802,6 +3099,660 @@ html body [class*="panel"]::after,
 html body [class*="Panel"]::before,
 html body [class*="Panel"]::after{
   background-image:none!important;
+}
+
+/* v166 mobile notice home: reference-style compact 3-column tiles */
+@media(max-width:1024px){
+  html body #studentView .mobileNoticeHome{
+    display:grid!important;
+    gap:14px!important;
+    width:100%!important;
+    padding:2px 2px 96px!important;
+    background:#fff!important;
+  }
+  html body #studentView .mobileNoticeTop{
+    display:grid!important;
+    grid-template-columns:56px minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:12px!important;
+    padding:4px 2px 2px!important;
+  }
+  html body #studentView .mobileNoticeTop h2{
+    margin:0!important;
+    color:#07142f!important;
+    font-size:30px!important;
+    line-height:1.05!important;
+    font-weight:850!important;
+    letter-spacing:0!important;
+  }
+  html body #studentView .mobileNoticeTop h2 span{font-size:24px!important}
+  html body #studentView .mobileNoticeTop p{
+    margin:8px 0 0!important;
+    color:#6b7892!important;
+    font-size:16px!important;
+    font-weight:500!important;
+    line-height:1.3!important;
+  }
+  html body #studentView .mobileNoticeMenuButton,
+  html body #studentView .mobileNoticeTop .mobileHomeReturnBtn{
+    height:52px!important;
+    min-width:52px!important;
+    border:1px solid #e5ebf3!important;
+    border-radius:20px!important;
+    background:#fff!important;
+    color:#233455!important;
+    box-shadow:0 8px 20px rgba(15,23,42,.06)!important;
+    font-size:15px!important;
+    font-weight:750!important;
+  }
+  html body #studentView .mobileNoticeTop .mobileHomeReturnBtn{
+    width:auto!important;
+    padding:0 14px!important;
+    border-radius:26px!important;
+  }
+  html body #studentView .mobileNoticePushCard{
+    position:relative!important;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) 28px!important;
+    gap:5px 10px!important;
+    align-items:center!important;
+    min-height:86px!important;
+    padding:16px 18px!important;
+    border:1px solid #d7eadf!important;
+    border-radius:20px!important;
+    background:#f8fffb!important;
+    color:#07142f!important;
+    box-shadow:none!important;
+    text-align:left!important;
+  }
+  html body #studentView .mobileNoticePushCard span{
+    justify-self:start!important;
+    padding:7px 13px!important;
+    border-radius:999px!important;
+    background:#e4f8ec!important;
+    color:#11823e!important;
+    font-size:14px!important;
+    font-weight:850!important;
+    line-height:1!important;
+  }
+  html body #studentView .mobileNoticePushCard b{
+    display:block!important;
+    grid-column:1!important;
+    color:#07142f!important;
+    font-size:16px!important;
+    font-weight:700!important;
+    line-height:1.25!important;
+  }
+  html body #studentView .mobileNoticePushCard i{
+    grid-column:2!important;
+    grid-row:1 / span 2!important;
+    align-self:center!important;
+    justify-self:end!important;
+    color:#07142f!important;
+  }
+  html body #studentView .mobileNoticePushCard.blocked span{
+    background:#fff1f2!important;
+    color:#be123c!important;
+  }
+  html body #studentView .mobileNoticeTileGrid{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:12px!important;
+    width:100%!important;
+  }
+  html body #studentView .mobileNoticeTile{
+    position:relative!important;
+    display:grid!important;
+    grid-template-rows:36px auto minmax(34px,1fr) 16px!important;
+    align-items:start!important;
+    min-width:0!important;
+    height:176px!important;
+    min-height:176px!important;
+    max-height:176px!important;
+    padding:14px 12px 12px!important;
+    border:1px solid #e6ebf2!important;
+    border-radius:18px!important;
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:0 8px 22px rgba(15,23,42,.055)!important;
+    overflow:hidden!important;
+    text-align:left!important;
+  }
+  html body #studentView .mobileNoticeTile::before,
+  html body #studentView .mobileNoticeTile::after{display:none!important}
+  html body #studentView .mobileNoticeTile .mobileNoticeTileIcon{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+    border-radius:14px!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    color:var(--tile-color,#2563eb)!important;
+    font-size:34px!important;
+  }
+  html body #studentView .mobileNoticeTile .mobileNoticeTileIcon .msIcon{
+    font-size:34px!important;
+    font-weight:450!important;
+  }
+  html body #studentView .mobileNoticeTile em{
+    position:absolute!important;
+    top:16px!important;
+    right:12px!important;
+    max-width:44px!important;
+    padding:5px 8px!important;
+    border:0!important;
+    border-radius:999px!important;
+    background:var(--tile-soft,#eef6ff)!important;
+    color:var(--tile-color,#2563eb)!important;
+    font-size:13px!important;
+    font-style:normal!important;
+    font-weight:850!important;
+    line-height:1!important;
+    text-align:center!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    box-shadow:none!important;
+  }
+  html body #studentView .mobileNoticeTile b{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    margin:20px 0 0!important;
+    color:#07142f!important;
+    font-size:18px!important;
+    font-weight:850!important;
+    line-height:1.18!important;
+    letter-spacing:0!important;
+  }
+  html body #studentView .mobileNoticeTile small{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    margin:8px 0 0!important;
+    color:#4b5b73!important;
+    font-size:13px!important;
+    font-weight:500!important;
+    line-height:1.32!important;
+  }
+  html body #studentView .mobileNoticeTile i{
+    align-self:end!important;
+    justify-self:end!important;
+    color:var(--tile-color,#2563eb)!important;
+    font-style:normal!important;
+    line-height:1!important;
+  }
+  html body #studentView .mobileNoticeTile.green{--tile-color:#059669;--tile-soft:#e8f8ef}
+  html body #studentView .mobileNoticeTile.blue{--tile-color:#1d7cf2;--tile-soft:#e8f2ff}
+  html body #studentView .mobileNoticeTile.purple{--tile-color:#8b4cf6;--tile-soft:#f1e9ff}
+  html body #studentView .mobileNoticeTile.orange{--tile-color:#f97316;--tile-soft:#fff1df}
+  html body #studentView .mobileNoticeTile.teal{--tile-color:#0d9488;--tile-soft:#e3f8f6}
+  html body #studentView .mobileNoticeTile.pink{--tile-color:#ec407a;--tile-soft:#ffe9f1}
+  html body #studentView .mobileNoticeStrip{
+    display:grid!important;
+    grid-template-columns:52px minmax(0,1fr) auto 24px!important;
+    align-items:center!important;
+    gap:12px!important;
+    min-height:74px!important;
+    padding:12px 14px!important;
+    border:1px solid #d9e8fb!important;
+    border-radius:18px!important;
+    background:#f8fbff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-align:left!important;
+  }
+  html body #studentView .mobileNoticeStrip>span{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:48px!important;
+    height:48px!important;
+    border-radius:18px!important;
+    background:#eef5ff!important;
+    color:#377cf6!important;
+  }
+  html body #studentView .mobileNoticeStrip small{
+    display:block!important;
+    margin:0 0 4px!important;
+    color:#64748b!important;
+    font-size:13px!important;
+    font-weight:650!important;
+    line-height:1.1!important;
+  }
+  html body #studentView .mobileNoticeStrip b{
+    display:block!important;
+    min-width:0!important;
+    color:#07142f!important;
+    font-size:16px!important;
+    font-weight:750!important;
+    line-height:1.25!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  html body #studentView .mobileNoticeStrip em{
+    padding:8px 10px!important;
+    border-radius:999px!important;
+    background:#eee7ff!important;
+    color:#7c3aed!important;
+    font-size:14px!important;
+    font-style:normal!important;
+    font-weight:850!important;
+    line-height:1!important;
+  }
+  html body #studentView .mobileNoticeLine{
+    grid-template-columns:52px minmax(0,1fr)!important;
+  }
+  html body #studentView .mobileNoticeLine>span{
+    background:#eaf3ff!important;
+    color:#2f7df6!important;
+  }
+}
+
+@media(max-width:390px){
+  html body #studentView .mobileNoticeHome{gap:11px!important}
+  html body #studentView .mobileNoticeTileGrid{gap:9px!important}
+  html body #studentView .mobileNoticeTile{
+    height:158px!important;
+    min-height:158px!important;
+    max-height:158px!important;
+    padding:11px 9px 10px!important;
+    border-radius:16px!important;
+  }
+  html body #studentView .mobileNoticeTile b{font-size:16px!important}
+  html body #studentView .mobileNoticeTile small{font-size:12px!important}
+  html body #studentView .mobileNoticeTile em{right:9px!important;font-size:12px!important}
+}
+
+/* v167 peer home feed */
+.peerVisitPage{display:grid;gap:14px;padding-bottom:92px}
+.visitHero{border:1px solid #e5ebf3;border-radius:20px;background:#fff;padding:20px;box-shadow:0 10px 28px rgba(15,23,42,.05)}
+.visitHero h2{margin:0;color:#07142f;font-size:28px;font-weight:850;letter-spacing:0}
+.visitHero p{margin:6px 0 0;color:#64748b;font-size:14px;font-weight:550}
+.visitSubTabs{display:flex;gap:8px;padding:4px;border:1px solid #e5ebf3;border-radius:16px;background:#f8fafc}
+.visitSubTabs button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;border:0;border-radius:12px;background:transparent;color:#64748b;font-weight:800;box-shadow:none}
+.visitSubTabs button.active{background:#fff;color:#0f766e;box-shadow:0 8px 18px rgba(15,23,42,.06)}
+.visitFeedSection .head{align-items:flex-start}
+.peerFeedGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.peerFeedCard{position:relative;display:grid;gap:12px;min-height:206px;padding:0 16px 16px;border:1px solid #e5ebf3;border-radius:22px;background:#fff;background-image:none;box-shadow:0 12px 28px rgba(15,23,42,.055);text-align:left;overflow:hidden}
+.peerFeedCover{height:52px;margin:0 -16px;background:linear-gradient(135deg,var(--peer-soft),#fff)}
+.peerFeedBody{display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:-18px}
+.peerFeedAvatar{width:58px;height:58px;border-radius:22px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.peerFeedAvatar img,.peerFeedAvatar svg{max-width:100%;max-height:100%}
+.peerFeedMain{min-width:0;display:grid;gap:3px}
+.peerFeedMain b{color:#07142f;font-size:17px;font-weight:850;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.peerFeedMain em{color:#64748b;font-size:12px;font-style:normal;font-weight:650;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.peerFeedBody strong{padding:7px 10px;border-radius:999px;background:var(--peer-soft);color:var(--peer-accent);font-size:12px;font-weight:850;white-space:nowrap}
+.peerFeedCard p{min-height:34px;margin:0;color:#334155;font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.peerBadgeRow{display:flex;flex-wrap:wrap;gap:6px}
+.peerBadgeRow span{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:6px 9px;border-radius:999px;background:#f8fafc;color:#475569;font-size:11.5px;font-weight:800;line-height:1}
+.peerBadgeRow .msIcon{font-size:15px!important;color:var(--peer-accent)}
+.peerMiniAssets{display:flex;gap:5px;height:8px}
+.peerMiniAssets span{flex:1;min-width:0;border-radius:999px;background:#eef2f7;overflow:hidden}
+.peerMiniAssets i{display:block;height:100%;min-width:8px;border-radius:999px}
+.peerMiniAssets.empty,.peerMiniAssets.hiddenAsset{height:auto;color:#94a3b8;font-size:12px;font-weight:700}
+.peerHomeDetail{display:grid;gap:14px;padding-bottom:92px}
+.peerHomeHero{border:1px solid #e5ebf3;border-radius:24px;background:#fff;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,.055)}
+.peerHomeCover{height:96px;background:linear-gradient(135deg,var(--peer-soft),#fff)}
+.peerHomeHeroBody{display:grid;grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:end;padding:0 18px 16px;margin-top:-54px}
+.peerHomeAvatar{width:112px;height:112px;border-radius:30px;background:#fff;box-shadow:0 10px 26px rgba(15,23,42,.1);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.peerHomeHero h2{margin:0;color:#07142f;font-size:26px;font-weight:900;letter-spacing:0}
+.peerHomeHero p{margin:5px 0;color:#475569;font-size:14px;font-weight:750}
+.peerHomeHero em{display:block;color:#64748b;font-size:14px;font-style:normal;font-weight:600;line-height:1.35}
+.peerHomeHero>.peerBadgeRow{padding:0 18px 18px}
+.peerHomeInfoGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.peerInfoCard{border:1px solid #e5ebf3;border-radius:18px;background:#fff;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.04)}
+.peerInfoCard span{display:block;color:#64748b;font-size:12px;font-weight:750}
+.peerInfoCard b{display:block;margin-top:6px;color:#07142f;font-size:16px;font-weight:850;line-height:1.2}
+.peerHomePanel{border:1px solid #e5ebf3;border-radius:20px;background:#fff;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.045)}
+.peerBusinessList{display:grid;gap:8px}
+.peerBusinessList div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #f1f5f9}
+.peerBusinessList b{color:#07142f;font-size:14px}
+.peerBusinessList span{color:#64748b;font-size:12px;font-weight:700;text-align:right}
+.homeProfileSection .head{align-items:flex-start}
+.homeProfileEditor{display:grid;gap:14px}
+.homeThemeChoice{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.homeThemeChoice label{display:grid;gap:7px;justify-items:center;padding:10px 6px;border:1px solid #e5ebf3;border-radius:14px;background:#fff;cursor:pointer}
+.homeThemeChoice input{display:none}
+.homeThemeChoice i{width:28px;height:28px;border-radius:11px;background:linear-gradient(135deg,var(--peer-accent),var(--peer-soft));box-shadow:inset 0 0 0 1px rgba(255,255,255,.65)}
+.homeThemeChoice span{color:#334155;font-size:12px;font-weight:800}
+.homeThemeChoice label:has(input:checked){border-color:var(--peer-accent);background:var(--peer-soft)}
+.homeBadgeChoice{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.homeBadgeChoice label,.homePrivacyGrid label{display:flex;align-items:center;gap:7px;min-height:38px;padding:8px 10px;border:1px solid #e5ebf3;border-radius:12px;background:#fff;color:#334155;font-size:13px;font-weight:750}
+.homeBadgeChoice .msIcon{font-size:17px!important;color:#2563eb}
+.homePrivacyGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media(max-width:768px){
+  .peerVisitPage{gap:12px}
+  .visitHero{padding:16px;border-radius:18px}
+  .visitHero h2{font-size:24px}
+  .peerFeedGrid{grid-template-columns:1fr;gap:12px}
+  .peerFeedCard{min-height:188px;border-radius:20px}
+  .peerFeedBody{grid-template-columns:54px minmax(0,1fr);align-items:center}
+  .peerFeedBody strong{grid-column:2;justify-self:start;margin-top:2px}
+  .peerFeedAvatar{width:54px;height:54px;border-radius:20px}
+  .peerHomeHeroBody{grid-template-columns:86px minmax(0,1fr);gap:12px;margin-top:-42px;padding:0 14px 14px}
+  .peerHomeAvatar{width:86px;height:86px;border-radius:24px}
+  .peerHomeHero h2{font-size:22px}
+  .peerHomeInfoGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .homeThemeChoice{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .homeBadgeChoice,.homePrivacyGrid{grid-template-columns:1fr}
+}
+
+/* v168 teacher bulk payment tile selected state */
+html body[data-mode="teacher"] #teacherView .studentActionGrid{
+  grid-template-columns:repeat(auto-fill,minmax(142px,1fr))!important;
+  gap:10px!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile{
+  position:relative!important;
+  min-height:94px!important;
+  padding:12px 42px 12px 12px!important;
+  border:1px solid #dbe4f0!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  background-image:none!important;
+  box-shadow:0 4px 12px rgba(15,23,42,.04)!important;
+  cursor:pointer!important;
+  transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease,background-color .14s ease!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile:hover,
+html body[data-mode="teacher"] #teacherView .studentActionTile:focus-visible{
+  border-color:#94a3b8!important;
+  box-shadow:0 8px 18px rgba(15,23,42,.08)!important;
+  transform:translateY(-1px)!important;
+  outline:none!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile .bulkTxCheck{
+  position:absolute!important;
+  top:10px!important;
+  right:10px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:26px!important;
+  height:26px!important;
+  border:1px solid #cbd5e1!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  color:transparent!important;
+  box-shadow:none!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile .bulkTxCheck .msIcon{
+  font-size:18px!important;
+  font-weight:800!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input:checked){
+  border-color:#2563eb!important;
+  background:#eff6ff!important;
+  background-image:none!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.18),0 12px 26px rgba(37,99,235,.14)!important;
+  transform:scale(1.015)!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .bulkTxCheck,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input:checked) .bulkTxCheck{
+  border-color:#2563eb!important;
+  background:#2563eb!important;
+  color:#fff!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .tileName,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input:checked) .tileName{
+  color:#1d4ed8!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile input.bulkTxStudent{
+  position:absolute!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+@media(max-width:768px){
+  html body[data-mode="teacher"] #teacherView .studentActionGrid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    max-height:none!important;
+  }
+  html body[data-mode="teacher"] #teacherView .studentActionTile{
+    min-height:86px!important;
+    padding:11px 38px 11px 11px!important;
+  }
+  html body[data-mode="teacher"] #teacherView .studentActionTile.selected,
+  html body[data-mode="teacher"] #teacherView .studentActionTile:has(input:checked){
+    transform:none!important;
+  }
+}
+
+/* v164 EOF mobile tile enforcement */
+@media(max-width:768px){
+  html body #studentView .mobileMenuGrid,
+  html body #teacherView .mobileMenuGrid,
+  html body #studentView .noticeActionGrid,
+  html body #teacherView .noticeActionGrid{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+  }
+  html body #studentView .mobileMenuCard,
+  html body #teacherView .mobileMenuCard,
+  html body #studentView .noticeActionCard,
+  html body #teacherView .noticeActionCard{
+    aspect-ratio:1/1!important;
+    min-height:0!important;
+    height:auto!important;
+    display:grid!important;
+    grid-template-rows:auto auto minmax(0,1fr) auto!important;
+    gap:4px!important;
+    padding:9px!important;
+    border-radius:14px!important;
+    border:1px solid #dfe7ef!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-align:left!important;
+    overflow:hidden!important;
+  }
+  html body #studentView .mobileMenuCard:nth-child(n),
+  html body #teacherView .mobileMenuCard:nth-child(n),
+  html body #studentView .noticeActionCard:nth-child(n),
+  html body #teacherView .noticeActionCard:nth-child(n){
+    background:#f8fafc!important;
+    background-image:none!important;
+    box-shadow:none!important;
+  }
+  html body #studentView .mobileMenuCard .menuCardIcon,
+  html body #studentView .mobileMenuCard > span:first-child,
+  html body #teacherView .mobileMenuCard .menuCardIcon,
+  html body #teacherView .mobileMenuCard > span:first-child,
+  html body #studentView .noticeActionCard > span:first-child,
+  html body #teacherView .noticeActionCard > span:first-child{
+    width:30px!important;
+    height:30px!important;
+    min-width:30px!important;
+    border-radius:10px!important;
+    background:#eef3f8!important;
+    background-image:none!important;
+    color:#3b6f8f!important;
+    box-shadow:none!important;
+    font-size:18px!important;
+    font-weight:500!important;
+  }
+  html body #studentView .mobileMenuCard b,
+  html body #teacherView .mobileMenuCard b,
+  html body #studentView .noticeActionCard b,
+  html body #teacherView .noticeActionCard b{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    margin:0!important;
+    color:#1f2937!important;
+    font-size:12.5px!important;
+    font-weight:650!important;
+    line-height:1.16!important;
+    letter-spacing:0!important;
+  }
+  html body #studentView .mobileMenuCard small,
+  html body #teacherView .mobileMenuCard small,
+  html body #studentView .noticeActionCard small,
+  html body #teacherView .noticeActionCard small{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    color:#64748b!important;
+    font-size:9.8px!important;
+    font-weight:450!important;
+    line-height:1.18!important;
+  }
+  html body #studentView .mobileMenuCard em,
+  html body #teacherView .mobileMenuCard em,
+  html body #studentView .noticeActionCard em,
+  html body #teacherView .noticeActionCard em{
+    position:static!important;
+    align-self:end!important;
+    max-width:100%!important;
+    margin-top:auto!important;
+    padding:2px 6px!important;
+    border-radius:999px!important;
+    border:1px solid #d7e2ee!important;
+    background:#fff!important;
+    color:#475569!important;
+    box-shadow:none!important;
+    font-size:9.5px!important;
+    font-style:normal!important;
+    font-weight:600!important;
+    line-height:1.25!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+}
+
+/* v165 compact PWA menu tiles: keep mobile menus small even in wider standalone windows */
+@media(max-width:1024px){
+  html body[data-mode="student"] #studentView .noticeboardPage .mobileMenuGrid,
+  html body[data-mode="student"] #studentView .mobileMenuGrid,
+  html body[data-mode="teacher"] #teacherView .mobileMenuGrid,
+  html body[data-mode="teacher"] #teacherView .noticeActionGrid{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+  }
+  html body[data-mode="student"] #studentView .noticeboardPage .mobileMenuCard,
+  html body[data-mode="student"] #studentView .mobileMenuCard,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard,
+  html body[data-mode="teacher"] #teacherView .noticeActionCard{
+    aspect-ratio:auto!important;
+    height:96px!important;
+    min-height:96px!important;
+    max-height:96px!important;
+    width:100%!important;
+    display:grid!important;
+    grid-template-rows:24px auto 1fr!important;
+    gap:3px!important;
+    padding:8px!important;
+    border-radius:12px!important;
+    border:1px solid #dfe7ef!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    overflow:hidden!important;
+    text-align:left!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard:nth-child(n),
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard:nth-child(n),
+  html body[data-mode="teacher"] #teacherView .noticeActionCard:nth-child(n){
+    background:#f8fafc!important;
+    background-image:none!important;
+    box-shadow:none!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .mobileMenuCard > span:first-child,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard > span:first-child,
+  html body[data-mode="teacher"] #teacherView .noticeActionCard > span:first-child{
+    width:24px!important;
+    height:24px!important;
+    min-width:24px!important;
+    border-radius:8px!important;
+    background:#eef3f8!important;
+    color:#3b6f8f!important;
+    box-shadow:none!important;
+    font-size:15px!important;
+    font-weight:400!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard .msIcon,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard .msIcon{
+    font-size:15px!important;
+    font-weight:400!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard b,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard b,
+  html body[data-mode="teacher"] #teacherView .noticeActionCard b{
+    display:block!important;
+    margin:0!important;
+    color:#1f2937!important;
+    font-size:11.5px!important;
+    font-weight:600!important;
+    line-height:1.12!important;
+    letter-spacing:0!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard small,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard small,
+  html body[data-mode="teacher"] #teacherView .noticeActionCard small{
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    color:#64748b!important;
+    font-size:9px!important;
+    font-weight:400!important;
+    line-height:1.1!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard em,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard em,
+  html body[data-mode="teacher"] #teacherView .noticeActionCard em{
+    position:absolute!important;
+    right:6px!important;
+    top:6px!important;
+    max-width:52px!important;
+    padding:1px 5px!important;
+    border-radius:999px!important;
+    border:1px solid #d7e2ee!important;
+    background:#fff!important;
+    color:#475569!important;
+    box-shadow:none!important;
+    font-size:8.5px!important;
+    font-style:normal!important;
+    font-weight:600!important;
+    line-height:1.3!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  html body[data-mode="student"] #studentView .noticeboardPage > .section,
+  html body[data-mode="teacher"] #teacherView .noticeboardPage > .section{
+    padding:10px!important;
+  }
+  html body[data-mode="student"] #studentView .noticeboardPage .head{
+    margin-bottom:8px!important;
+  }
+  html body[data-mode="student"] #studentView .noticeboardPage .head h2{
+    font-size:28px!important;
+    line-height:1!important;
+  }
+  html body[data-mode="student"] #studentView .noticeboardPage .head .sub{
+    font-size:13px!important;
+    line-height:1.2!important;
+  }
 }
 
 /* v161 no-gradient cards: global card surface cleanup */
@@ -3580,6 +4531,21 @@ html body [class*="Panel"]::after{
   .mobileSubHeader h2{margin:0;font-size:21px;line-height:1.2;min-width:0;flex:1}
   .mobileHomeReturnBtn{margin-left:auto!important;min-height:38px!important;padding:7px 11px!important;border-radius:999px!important;background:#eff6ff!important;border:1px solid #bfdbfe!important;color:#1d4ed8!important;font-weight:1000!important;box-shadow:0 6px 14px rgba(37,99,235,.12)!important;white-space:nowrap}
   .mobileNoticeSubHeader .mobileHomeReturnBtn{flex:0 0 auto}
+  .mobilePushEnablePanel{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:8px!important;
+    margin:0 0 10px!important;
+  }
+  .mobilePushEnablePanel button,
+  .mobilePushEnablePanel .pill{
+    width:100%!important;
+    min-height:44px!important;
+    justify-content:center!important;
+    border-radius:14px!important;
+    font-weight:1000!important;
+  }
   .mobileTeacherDetail>.section:first-child{margin-top:0}
   .scroll{max-width:100%;overflow:visible!important;border:0!important}
   .scroll table,.scroll thead,.scroll tbody,.scroll tr,.scroll th,.scroll td{display:block;width:100%!important}
@@ -4187,6 +5153,62 @@ html body [class*="Panel"]::after{
   }
   body[data-mode="student"] #studentView .inlineEditBtn .msIcon{
     font-size:18px!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusPlain{
+    appearance:none!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    gap:7px!important;
+    max-width:100%!important;
+    min-height:34px!important;
+    margin:0 0 12px!important;
+    padding:5px 11px!important;
+    border:1px solid #d9dcff!important;
+    border-radius:999px!important;
+    background:#f8f9ff!important;
+    color:#344054!important;
+    box-shadow:none!important;
+    font-size:15px!important;
+    font-weight:900!important;
+    line-height:1.35!important;
+    text-align:left!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusPlain span{
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusPlain.editable{cursor:text!important}
+  body[data-mode="student"] #studentView .desktopStatusPlain .statusEditIcon{
+    flex:0 0 auto!important;
+    font-size:17px!important;
+    color:#667085!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusEditor{
+    display:grid!important;
+    grid-template-columns:minmax(0,260px) auto auto!important;
+    align-items:center!important;
+    gap:8px!important;
+    max-width:100%!important;
+    margin:0 0 12px!important;
+    padding:7px!important;
+    border:1px solid #d9dcff!important;
+    border-radius:18px!important;
+    background:#ffffff!important;
+    box-shadow:0 10px 24px rgba(15,23,42,.06)!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusEditor input{
+    min-width:0!important;
+    height:38px!important;
+    border-radius:12px!important;
+  }
+  body[data-mode="student"] #studentView .desktopStatusEditor button{
+    min-height:38px!important;
+    padding:0 12px!important;
+    border-radius:12px!important;
+    font-size:13px!important;
+    font-weight:900!important;
   }
   body[data-mode="student"] #studentView .desktopReferenceMeta{
     display:flex!important;
@@ -13572,6 +14594,40 @@ td{border-color:#edf2fb!important}
 @media(max-width:900px){#detailModal .detailModal{width:calc(100vw - 20px)!important;max-width:calc(100vw - 20px)!important;padding:14px!important;border-radius:16px!important}#detailModal .modalHead{margin:-14px -14px 12px!important;padding:14px!important}#detailModal .studentDetailGrid,#detailModal .peerDetailGrid{grid-template-columns:1fr!important}#detailModal .assetPieWrap{grid-template-columns:1fr!important}#detailModal .assetPieSvgBox{margin:0 auto!important}#detailModal .peerAvatarCard{min-height:220px!important}}
 
 
+/* v164 final mobile tile enforcement after all card resets */
+@media(max-width:768px){
+  html body #studentView .mobileMenuGrid,
+  html body #teacherView .mobileMenuGrid,
+  html body #studentView .noticeActionGrid,
+  html body #teacherView .noticeActionGrid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;width:100%!important}
+  html body #studentView .mobileMenuCard,
+  html body #teacherView .mobileMenuCard,
+  html body #studentView .noticeActionCard,
+  html body #teacherView .noticeActionCard{aspect-ratio:1/1!important;min-height:0!important;height:auto!important;display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto!important;gap:4px!important;padding:9px!important;border-radius:14px!important;border:1px solid #dfe7ef!important;background:#f8fafc!important;background-image:none!important;box-shadow:none!important;text-align:left!important;overflow:hidden!important}
+  html body #studentView .mobileMenuCard:nth-child(n),
+  html body #teacherView .mobileMenuCard:nth-child(n),
+  html body #studentView .noticeActionCard:nth-child(n),
+  html body #teacherView .noticeActionCard:nth-child(n){background:#f8fafc!important;background-image:none!important;box-shadow:none!important}
+  html body #studentView .mobileMenuCard .menuCardIcon,
+  html body #studentView .mobileMenuCard > span:first-child,
+  html body #teacherView .mobileMenuCard .menuCardIcon,
+  html body #teacherView .mobileMenuCard > span:first-child,
+  html body #studentView .noticeActionCard > span:first-child,
+  html body #teacherView .noticeActionCard > span:first-child{width:30px!important;height:30px!important;min-width:30px!important;border-radius:10px!important;background:#eef3f8!important;background-image:none!important;color:#3b6f8f!important;box-shadow:none!important;font-size:18px!important;font-weight:500!important}
+  html body #studentView .mobileMenuCard b,
+  html body #teacherView .mobileMenuCard b,
+  html body #studentView .noticeActionCard b,
+  html body #teacherView .noticeActionCard b{display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important;margin:0!important;color:#1f2937!important;font-size:12.5px!important;font-weight:650!important;line-height:1.16!important;letter-spacing:0!important}
+  html body #studentView .mobileMenuCard small,
+  html body #teacherView .mobileMenuCard small,
+  html body #studentView .noticeActionCard small,
+  html body #teacherView .noticeActionCard small{display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important;color:#64748b!important;font-size:9.8px!important;font-weight:450!important;line-height:1.18!important}
+  html body #studentView .mobileMenuCard em,
+  html body #teacherView .mobileMenuCard em,
+  html body #studentView .noticeActionCard em,
+  html body #teacherView .noticeActionCard em{position:static!important;align-self:end!important;max-width:100%!important;margin-top:auto!important;padding:2px 6px!important;border-radius:999px!important;border:1px solid #d7e2ee!important;background:#fff!important;color:#475569!important;box-shadow:none!important;font-size:9.5px!important;font-style:normal!important;font-weight:600!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+}
+
 /* v161 final global no-gradient cards: true EOF override */
 html body .section,
 html body section.section,
@@ -13604,4 +14660,1323 @@ html body [class*="panel"]::after,
 html body [class*="Panel"]::before,
 html body [class*="Panel"]::after{
   background-image:none!important;
+}
+
+/* v168 flat mobile menu + Instagram-style peer browsing patch */
+html body[data-mode="student"] #studentView,
+html body[data-mode="teacher"] #teacherView{
+  --flat-page:#f8fafc;
+  --flat-card:#ffffff;
+  --flat-border:#e2e8f0;
+  --flat-ink:#0f172a;
+  --flat-muted:#64748b;
+  --flat-accent:#10b981;
+}
+html body[data-mode="student"] #studentView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard,.peerFeedCard,.peerHomePanel,.peerHomeHero,.peerInfoCard),
+html body[data-mode="teacher"] #teacherView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard){
+  background:#fff!important;
+  background-image:none!important;
+  border-color:var(--flat-border)!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard,.peerFeedCard,.peerHomePanel,.peerHomeHero,.peerInfoCard)::before,
+html body[data-mode="student"] #studentView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard,.peerFeedCard,.peerHomePanel,.peerHomeHero,.peerInfoCard)::after,
+html body[data-mode="teacher"] #teacherView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard)::before,
+html body[data-mode="teacher"] #teacherView :where(.section,.card,.itemCard,.stat,.tabletStat,.assetBox,.requestGroupCard,.requestLine,.priceManageCard,.marketRegisterLauncher,.marketBoostControl,.marketSellerDeck,.marketSellerGroup,.marketListing,.marketPreviewMini,.productCompactCard,.productStoreCard,.avatarShopCard,.roomTemplateCard,.bondIssueCard,.loanLimitCard,.creditScoreCard,.fineNoticeCard,.tradeKingCard,.noticeCard,.noticeDetailPanel,.studentProfilePanel,.studentActionTile,.mobileMenuCard,.recommendCard)::after{
+  background:none!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
+@media(max-width:768px){
+  html body[data-mode="student"] #studentView .mobileMenuGrid,
+  html body[data-mode="teacher"] #teacherView .mobileMenuGrid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+    width:100%!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard{
+    aspect-ratio:auto!important;
+    min-height:106px!important;
+    height:auto!important;
+    display:grid!important;
+    grid-template-columns:42px minmax(0,1fr) 18px!important;
+    grid-template-rows:auto auto auto!important;
+    align-items:center!important;
+    gap:6px 10px!important;
+    padding:14px!important;
+    border:1px solid var(--flat-border)!important;
+    border-radius:20px!important;
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-align:left!important;
+    overflow:hidden!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard:nth-child(n),
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard:nth-child(n){
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard::after,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard::after{
+    content:"›"!important;
+    display:grid!important;
+    grid-column:3!important;
+    grid-row:1 / span 3!important;
+    place-items:center!important;
+    width:18px!important;
+    height:100%!important;
+    color:#94a3b8!important;
+    font-size:20px!important;
+    font-weight:400!important;
+    background:none!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .mobileMenuCard > span:first-child,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard > span:first-child{
+    grid-column:1!important;
+    grid-row:1 / span 2!important;
+    width:42px!important;
+    height:42px!important;
+    min-width:42px!important;
+    border:1px solid #e2e8f0!important;
+    border-radius:14px!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    color:#334155!important;
+    box-shadow:none!important;
+    font-size:22px!important;
+    font-weight:400!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard b,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard b{
+    grid-column:2!important;
+    grid-row:1!important;
+    display:block!important;
+    margin:0!important;
+    color:var(--flat-ink)!important;
+    font-size:16px!important;
+    font-weight:800!important;
+    line-height:1.18!important;
+    letter-spacing:-.02em!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard small,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard small{
+    grid-column:2!important;
+    grid-row:2!important;
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+    overflow:hidden!important;
+    color:var(--flat-muted)!important;
+    font-size:12px!important;
+    font-weight:500!important;
+    line-height:1.35!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard em,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard em{
+    grid-column:1 / 3!important;
+    grid-row:3!important;
+    justify-self:start!important;
+    position:static!important;
+    max-width:100%!important;
+    margin-top:4px!important;
+    padding:4px 9px!important;
+    border:1px solid #e2e8f0!important;
+    border-radius:999px!important;
+    background:#f8fafc!important;
+    color:#475569!important;
+    box-shadow:none!important;
+    font-size:11px!important;
+    font-style:normal!important;
+    font-weight:700!important;
+    line-height:1.2!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+}
+html body[data-mode="student"] #studentView .instagramVisitPage,
+html body[data-mode="student"] #studentView .peerVisitPage{
+  display:grid!important;
+  gap:14px!important;
+}
+html body[data-mode="student"] #studentView .visitHero{
+  border:0!important;
+  border-radius:0!important;
+  padding:6px 0 2px!important;
+  background:transparent!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .visitHero h2{
+  color:#0f172a!important;
+  font-size:30px!important;
+  font-weight:900!important;
+  letter-spacing:-.04em!important;
+}
+html body[data-mode="student"] #studentView .visitHero p{
+  color:#64748b!important;
+  font-size:13px!important;
+  font-weight:600!important;
+}
+html body[data-mode="student"] #studentView .visitSubTabs{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:0!important;
+  padding:3px!important;
+  border:1px solid #e2e8f0!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .visitSubTabs button{
+  min-height:42px!important;
+  border:0!important;
+  border-radius:999px!important;
+  background:transparent!important;
+  color:#64748b!important;
+  box-shadow:none!important;
+  font-size:14px!important;
+  font-weight:800!important;
+}
+html body[data-mode="student"] #studentView .visitSubTabs button.active{
+  background:#0f172a!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .instagramVisitSection,
+html body[data-mode="student"] #studentView .visitFeedSection{
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .visitFeedSection>.head{
+  padding:0 0 6px!important;
+  border:0!important;
+  background:transparent!important;
+}
+html body[data-mode="student"] #studentView .visitFeedSection>.head h2{
+  font-size:20px!important;
+  color:#0f172a!important;
+  letter-spacing:-.03em!important;
+}
+html body[data-mode="student"] #studentView .flatGhostBtn,
+html body[data-mode="student"] #studentView .visitFeedSection>.head button{
+  border:1px solid #e2e8f0!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  background-image:none!important;
+  color:#0f172a!important;
+  box-shadow:none!important;
+  font-weight:800!important;
+}
+html body[data-mode="student"] #studentView .peerStoryRail{
+  display:flex!important;
+  gap:12px!important;
+  margin:4px 0 14px!important;
+  padding:8px 2px 12px!important;
+  overflow-x:auto!important;
+  scrollbar-width:none!important;
+}
+html body[data-mode="student"] #studentView .peerStoryRail::-webkit-scrollbar{display:none!important}
+html body[data-mode="student"] #studentView .peerStoryItem{
+  flex:0 0 74px!important;
+  display:grid!important;
+  justify-items:center!important;
+  gap:4px!important;
+  min-width:0!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#0f172a!important;
+  text-align:center!important;
+}
+html body[data-mode="student"] #studentView .peerStoryRing{
+  width:62px!important;
+  height:62px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:2px solid var(--peer-accent,#0f172a)!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  background-image:none!important;
+  overflow:hidden!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .peerStoryRing .staticAvatarThumb,
+html body[data-mode="student"] #studentView .peerStoryRing .staticAvatarStage{
+  border:0!important;
+  border-radius:50%!important;
+  background:#f8fafc!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .peerStoryItem b{
+  max-width:72px!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#0f172a!important;
+  font-size:12px!important;
+  font-weight:800!important;
+}
+html body[data-mode="student"] #studentView .peerStoryItem em{
+  max-width:72px!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#94a3b8!important;
+  font-size:10px!important;
+  font-style:normal!important;
+  font-weight:600!important;
+}
+html body[data-mode="student"] #studentView .instagramPeerGrid,
+html body[data-mode="student"] #studentView .peerFeedGrid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:16px!important;
+}
+html body[data-mode="student"] #studentView .instaPeerCard,
+html body[data-mode="student"] #studentView .peerFeedCard{
+  display:grid!important;
+  gap:0!important;
+  min-height:0!important;
+  padding:0!important;
+  border:1px solid #e2e8f0!important;
+  border-radius:22px!important;
+  background:#fff!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+  text-align:left!important;
+}
+html body[data-mode="student"] #studentView .peerFeedCover,
+html body[data-mode="student"] #studentView .peerFeedBody{display:none!important}
+html body[data-mode="student"] #studentView .peerPostHeader{
+  display:grid!important;
+  grid-template-columns:44px minmax(0,1fr) 28px!important;
+  align-items:center!important;
+  gap:10px!important;
+  padding:12px 14px!important;
+  border-bottom:1px solid #f1f5f9!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatar{
+  width:44px!important;
+  height:44px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1.5px solid var(--peer-accent,#0f172a)!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerPostName{min-width:0!important;display:grid!important;gap:2px!important}
+html body[data-mode="student"] #studentView .peerPostName b{color:#0f172a!important;font-size:15px!important;font-weight:900!important;letter-spacing:-.02em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+html body[data-mode="student"] #studentView .peerPostName em{color:#64748b!important;font-size:11px!important;font-style:normal!important;font-weight:600!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+html body[data-mode="student"] #studentView .peerPostHeader i{display:grid!important;place-items:center!important;color:#64748b!important;font-style:normal!important}
+html body[data-mode="student"] #studentView .peerPostMedia{
+  display:grid!important;
+  grid-template-columns:minmax(92px,130px) minmax(0,1fr)!important;
+  gap:14px!important;
+  align-items:center!important;
+  min-height:152px!important;
+  padding:16px!important;
+  background:#fff!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage{
+  aspect-ratio:1/1!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1px solid #e2e8f0!important;
+  border-radius:22px!important;
+  background:#f8fafc!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage .avatarPreview,
+html body[data-mode="student"] #studentView .peerPostAvatarStage .staticAvatarStage{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .peerPostMetrics{display:grid!important;gap:8px!important;align-content:center!important}
+html body[data-mode="student"] #studentView .peerPostMetrics strong{display:block!important;color:#0f172a!important;font-size:23px!important;font-weight:950!important;letter-spacing:-.04em!important;line-height:1.05!important}
+html body[data-mode="student"] #studentView .peerPostMetrics span{display:inline-flex!important;width:max-content!important;max-width:100%!important;padding:5px 9px!important;border:1px solid #e2e8f0!important;border-radius:999px!important;background:#fff!important;color:#334155!important;font-size:12px!important;font-weight:800!important}
+html body[data-mode="student"] #studentView .peerPostActions{
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+  padding:11px 14px 0!important;
+  border-top:1px solid #f1f5f9!important;
+  color:#0f172a!important;
+}
+html body[data-mode="student"] #studentView .peerPostActions span{display:inline-flex!important;color:#0f172a!important}
+html body[data-mode="student"] #studentView .peerPostActions b{margin-left:auto!important;color:#0f172a!important;font-size:12px!important;font-weight:900!important}
+html body[data-mode="student"] #studentView .peerPostCaption{
+  min-height:0!important;
+  margin:0!important;
+  padding:8px 14px 0!important;
+  color:#334155!important;
+  font-size:13px!important;
+  font-weight:500!important;
+  line-height:1.45!important;
+  -webkit-line-clamp:2!important;
+}
+html body[data-mode="student"] #studentView .peerPostCaption b{color:#0f172a!important;font-weight:900!important}
+html body[data-mode="student"] #studentView .peerBadgeRow{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+  padding:10px 14px 12px!important;
+}
+html body[data-mode="student"] #studentView .peerBadgeRow span{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:4px!important;
+  padding:5px 8px!important;
+  border:1px solid #e2e8f0!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  background-image:none!important;
+  color:#334155!important;
+  font-size:11px!important;
+  font-weight:800!important;
+}
+html body[data-mode="student"] #studentView .peerMiniAssets{
+  display:flex!important;
+  gap:4px!important;
+  height:7px!important;
+  margin:0 14px 14px!important;
+  padding:0!important;
+  border:0!important;
+  background:#f1f5f9!important;
+  border-radius:999px!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerMiniAssets span{flex:1!important;display:block!important;height:100%!important;background:transparent!important;border:0!important;border-radius:0!important;overflow:hidden!important}
+html body[data-mode="student"] #studentView .peerMiniAssets i{display:block!important;height:100%!important;border-radius:999px!important}
+html body[data-mode="student"] #studentView .hiddenAsset,
+html body[data-mode="student"] #studentView .peerMiniAssets.empty{height:auto!important;margin:0 14px 14px!important;padding:8px 10px!important;border:1px solid #e2e8f0!important;background:#fff!important;color:#64748b!important;font-size:12px!important;font-weight:700!important}
+html body[data-mode="student"] #studentView .peerHomeCover{background:#f8fafc!important;background-image:none!important}
+@media(max-width:768px){
+  html body[data-mode="student"] #studentView .instagramPeerGrid,
+  html body[data-mode="student"] #studentView .peerFeedGrid{grid-template-columns:1fr!important;gap:14px!important}
+  html body[data-mode="student"] #studentView .peerPostMedia{grid-template-columns:104px minmax(0,1fr)!important;min-height:136px!important;padding:14px!important}
+  html body[data-mode="student"] #studentView .peerPostMetrics strong{font-size:21px!important}
+  html body[data-mode="student"] #studentView .visitHero h2{font-size:28px!important}
+}
+
+
+/* v168 hotfix: friend feed cleanup + flat mobile menu/card finish */
+html body[data-mode="student"] #studentView .peerStoryRail,
+html body[data-mode="student"] #studentView .peerStoryItem,
+html body[data-mode="student"] #studentView .peerStoryRing{
+  display:none!important;
+}
+html body[data-mode="student"] #studentView .visitFeedSection>.head .sub,
+html body[data-mode="student"] #studentView .instagramVisitSection>.head .sub{
+  display:none!important;
+}
+html body[data-mode="student"] #studentView .feedOnlyGrid,
+html body[data-mode="student"] #studentView .instagramPeerGrid,
+html body[data-mode="student"] #studentView .peerFeedGrid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(320px,1fr))!important;
+  gap:16px!important;
+  align-items:start!important;
+  width:100%!important;
+}
+html body[data-mode="student"] #studentView .peerFeedCard,
+html body[data-mode="student"] #studentView .instaPeerCard,
+html body[data-mode="student"] #studentView .peerHomePanel,
+html body[data-mode="student"] #studentView .peerInfoCard,
+html body[data-mode="student"] #studentView .peerHomeHero,
+html body[data-mode="student"] #studentView .visitHero,
+html body[data-mode="student"] #studentView .visitSubTabs,
+html body[data-mode="student"] #studentView .mobileMenuCard,
+html body[data-mode="teacher"] #teacherView .mobileMenuCard{
+  background:#fff!important;
+  background-image:none!important;
+  border-color:#e5e7eb!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .peerFeedCard,
+html body[data-mode="student"] #studentView .instaPeerCard{
+  display:block!important;
+  min-height:0!important;
+  border-radius:20px!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerPostHeader{
+  display:grid!important;
+  grid-template-columns:42px minmax(0,1fr) 28px!important;
+  gap:10px!important;
+  align-items:center!important;
+  padding:12px 14px!important;
+  border-bottom:1px solid #f1f5f9!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatar{
+  width:42px!important;
+  height:42px!important;
+  border:1px solid #d1d5db!important;
+  border-radius:50%!important;
+  background:#fff!important;
+}
+html body[data-mode="student"] #studentView .peerPostMedia{
+  display:grid!important;
+  grid-template-columns:116px minmax(0,1fr)!important;
+  gap:14px!important;
+  align-items:center!important;
+  min-height:138px!important;
+  padding:14px!important;
+  background:#fff!important;
+  background-image:none!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage{
+  background:#f8fafc!important;
+  background-image:none!important;
+  border:1px solid #e5e7eb!important;
+  border-radius:18px!important;
+  box-shadow:none!important;
+}
+html body[data-mode="student"] #studentView .peerPostActions{
+  border-top:1px solid #f1f5f9!important;
+}
+html body[data-mode="student"] #studentView .peerBadgeRow span,
+html body[data-mode="student"] #studentView .peerPostMetrics span,
+html body[data-mode="student"] #studentView .flatGhostBtn,
+html body[data-mode="student"] #studentView .visitFeedSection>.head button{
+  background:#fff!important;
+  background-image:none!important;
+  border-color:#e5e7eb!important;
+  box-shadow:none!important;
+}
+@media(max-width:768px){
+  html body[data-mode="student"] #studentView .feedOnlyGrid,
+  html body[data-mode="student"] #studentView .instagramPeerGrid,
+  html body[data-mode="student"] #studentView .peerFeedGrid{
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+  }
+  html body[data-mode="student"] #studentView .peerPostMedia{
+    grid-template-columns:96px minmax(0,1fr)!important;
+    min-height:124px!important;
+    padding:12px!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuGrid,
+  html body[data-mode="teacher"] #teacherView .mobileMenuGrid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard{
+    min-height:96px!important;
+    aspect-ratio:auto!important;
+    border-radius:16px!important;
+    padding:14px!important;
+    display:grid!important;
+    grid-template-columns:38px minmax(0,1fr)!important;
+    grid-template-rows:auto auto auto!important;
+    column-gap:10px!important;
+    row-gap:4px!important;
+    align-items:center!important;
+    color:#0f172a!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .mobileMenuCard > span:first-child,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard .menuCardIcon,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard > span:first-child{
+    grid-row:1 / span 2!important;
+    width:38px!important;
+    height:38px!important;
+    border-radius:12px!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    color:#334155!important;
+    border:1px solid #e5e7eb!important;
+    box-shadow:none!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard b,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard b{
+    font-size:15px!important;
+    font-weight:900!important;
+    color:#0f172a!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard small,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard small{
+    font-size:11.5px!important;
+    color:#64748b!important;
+    line-height:1.25!important;
+  }
+  html body[data-mode="student"] #studentView .mobileMenuCard em,
+  html body[data-mode="teacher"] #teacherView .mobileMenuCard em{
+    grid-column:1 / -1!important;
+    position:static!important;
+    justify-self:start!important;
+    max-width:100%!important;
+    background:#f8fafc!important;
+    background-image:none!important;
+    border:1px solid #e5e7eb!important;
+    color:#475569!important;
+    box-shadow:none!important;
+  }
+}
+
+/* v169 hotfix: keep peer-feed avatars inside their own containers */
+html body[data-mode="student"] #studentView .peerPostAvatar{
+  position:relative!important;
+  display:grid!important;
+  place-items:center!important;
+  overflow:hidden!important;
+  flex:0 0 auto!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatar .staticAvatarImg,
+html body[data-mode="student"] #studentView .peerPostAvatar .staticAvatarImg.small,
+html body[data-mode="student"] #studentView .peerPostAvatar img,
+html body[data-mode="student"] #studentView .peerPostAvatar svg{
+  position:static!important;
+  left:auto!important;
+  top:auto!important;
+  transform:none!important;
+  z-index:auto!important;
+  width:34px!important;
+  height:34px!important;
+  max-width:34px!important;
+  max-height:34px!important;
+  object-fit:contain!important;
+  display:block!important;
+  filter:none!important;
+  animation:none!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage{
+  position:relative!important;
+  display:grid!important;
+  place-items:center!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage .staticAvatarStage{
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  display:grid!important;
+  place-items:center!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  overflow:hidden!important;
+}
+html body[data-mode="student"] #studentView .peerPostAvatarStage .staticAvatarImg,
+html body[data-mode="student"] #studentView .peerPostAvatarStage .staticAvatarImg.small,
+html body[data-mode="student"] #studentView .peerPostAvatarStage img,
+html body[data-mode="student"] #studentView .peerPostAvatarStage svg{
+  position:static!important;
+  left:auto!important;
+  top:auto!important;
+  transform:none!important;
+  z-index:auto!important;
+  width:auto!important;
+  height:auto!important;
+  max-width:78px!important;
+  max-height:78px!important;
+  object-fit:contain!important;
+  display:block!important;
+  filter:none!important;
+  animation:none!important;
+}
+
+/* v170: 순위표 신용도 pill 가독성 복구
+   - 플랫 UI 정리 과정에서 rankTable 내부 .pill 배경만 통일되며 글자 대비가 약해진 문제 수정
+   - 순위표/구경하기 순위표/교사용 신용표의 신용도 배지를 선명하게 보이도록 강제 */
+body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill,
+body[data-mode="student"] #studentView .rankTable td[data-label="신용"] .pill,
+body[data-mode="student"] #studentView .rankTable .pill,
+body[data-mode="student"] #studentView .fullRankSection .pill,
+body[data-mode="student"] #studentView .visitPage .rankTable .pill,
+body[data-mode="teacher"] .rankTable .pill,
+body[data-mode="teacher"] table .pill {
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:74px!important;
+  padding:4px 10px!important;
+  border-radius:999px!important;
+  border:1px solid #cbd5e1!important;
+  background:#ffffff!important;
+  background-image:none!important;
+  color:#0f172a!important;
+  font-size:12px!important;
+  font-weight:900!important;
+  line-height:1.2!important;
+  white-space:nowrap!important;
+  opacity:1!important;
+  filter:none!important;
+  text-shadow:none!important;
+  box-shadow:none!important;
+}
+body[data-mode="student"] #studentView .rankTable .pill.green,
+body[data-mode="student"] #studentView .fullRankSection .pill.green,
+body[data-mode="teacher"] table .pill.green {
+  background:#ecfdf5!important;
+  border-color:#a7f3d0!important;
+  color:#047857!important;
+}
+body[data-mode="student"] #studentView .rankTable .pill.blue,
+body[data-mode="student"] #studentView .fullRankSection .pill.blue,
+body[data-mode="teacher"] table .pill.blue {
+  background:#eff6ff!important;
+  border-color:#bfdbfe!important;
+  color:#1d4ed8!important;
+}
+body[data-mode="student"] #studentView .rankTable .pill.orange,
+body[data-mode="student"] #studentView .fullRankSection .pill.orange,
+body[data-mode="teacher"] table .pill.orange {
+  background:#fff7ed!important;
+  border-color:#fed7aa!important;
+  color:#c2410c!important;
+}
+body[data-mode="student"] #studentView .rankTable .pill.red,
+body[data-mode="student"] #studentView .fullRankSection .pill.red,
+body[data-mode="teacher"] table .pill.red {
+  background:#fff1f2!important;
+  border-color:#fecdd3!important;
+  color:#be123c!important;
+}
+body[data-mode="student"] #studentView .rankTable .pill.purple,
+body[data-mode="student"] #studentView .fullRankSection .pill.purple,
+body[data-mode="teacher"] table .pill.purple {
+  background:#faf5ff!important;
+  border-color:#e9d5ff!important;
+  color:#7e22ce!important;
+}
+
+/* v171 신용도 등급별 배지 색상 복구: S/A/B/C/D/E를 모두 다르게 표시 */
+.pill.credit-s,
+.badge.credit-s,
+.rankTable .pill.credit-s,
+.visitPage .rankTable .pill.credit-s,
+.mobileRankOneLine .rankCredit .pill.credit-s{
+  background:#ecfdf5!important;
+  color:#047857!important;
+  border:1px solid #a7f3d0!important;
+}
+.pill.credit-a,
+.badge.credit-a,
+.rankTable .pill.credit-a,
+.visitPage .rankTable .pill.credit-a,
+.mobileRankOneLine .rankCredit .pill.credit-a{
+  background:#dbeafe!important;
+  color:#1d4ed8!important;
+  border:1px solid #bfdbfe!important;
+}
+.pill.credit-b,
+.badge.credit-b,
+.rankTable .pill.credit-b,
+.visitPage .rankTable .pill.credit-b,
+.mobileRankOneLine .rankCredit .pill.credit-b{
+  background:#f0fdfa!important;
+  color:#0f766e!important;
+  border:1px solid #99f6e4!important;
+}
+.pill.credit-c,
+.badge.credit-c,
+.rankTable .pill.credit-c,
+.visitPage .rankTable .pill.credit-c,
+.mobileRankOneLine .rankCredit .pill.credit-c{
+  background:#fef9c3!important;
+  color:#854d0e!important;
+  border:1px solid #fde68a!important;
+}
+.pill.credit-d,
+.badge.credit-d,
+.rankTable .pill.credit-d,
+.visitPage .rankTable .pill.credit-d,
+.mobileRankOneLine .rankCredit .pill.credit-d{
+  background:#ffedd5!important;
+  color:#c2410c!important;
+  border:1px solid #fed7aa!important;
+}
+.pill.credit-e,
+.badge.credit-e,
+.rankTable .pill.credit-e,
+.visitPage .rankTable .pill.credit-e,
+.mobileRankOneLine .rankCredit .pill.credit-e{
+  background:#fee2e2!important;
+  color:#b91c1c!important;
+  border:1px solid #fecaca!important;
+}
+
+
+/* v172: 신용도 등급별 색상 최종 강제 적용
+   credit-* 클래스가 붙는 모든 배지를 가장 뒤에서 다시 잡아 플랫 단색으로 표시한다. */
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-s,
+html body [data-credit-grade="S"]{
+  background:#ecfdf5!important;background-image:none!important;color:#047857!important;border:1px solid #a7f3d0!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-a,
+html body [data-credit-grade="A"]{
+  background:#dbeafe!important;background-image:none!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-b,
+html body [data-credit-grade="B"]{
+  background:#f0fdfa!important;background-image:none!important;color:#0f766e!important;border:1px solid #99f6e4!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-c,
+html body [data-credit-grade="C"]{
+  background:#fef9c3!important;background-image:none!important;color:#854d0e!important;border:1px solid #fde68a!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-d,
+html body [data-credit-grade="D"]{
+  background:#ffedd5!important;background-image:none!important;color:#c2410c!important;border:1px solid #fed7aa!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge).credit-e,
+html body [data-credit-grade="E"]{
+  background:#fee2e2!important;background-image:none!important;color:#b91c1c!important;border:1px solid #fecaca!important;
+}
+html body :where(.pill,.badge,.rankCredit,.mobileSnsCreditBadge)[data-credit-grade]{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  min-width:74px!important;padding:4px 10px!important;border-radius:999px!important;
+  font-size:12px!important;font-weight:900!important;line-height:1.2!important;white-space:nowrap!important;
+  opacity:1!important;filter:none!important;text-shadow:none!important;box-shadow:none!important;
+}
+
+/* v174 final: teacher bulk payment selected tiles must stay visible after later card resets */
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"],
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked){
+  border-color:#2563eb!important;
+  background:#eff6ff!important;
+  background-image:none!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.2),0 14px 28px rgba(37,99,235,.16)!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .bulkTxCheck,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"] .bulkTxCheck,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked) .bulkTxCheck{
+  border-color:#2563eb!important;
+  background:#2563eb!important;
+  color:#fff!important;
+}
+html body[data-mode="teacher"] #teacherView .studentActionTile.selected .tileName,
+html body[data-mode="teacher"] #teacherView .studentActionTile[aria-pressed="true"] .tileName,
+html body[data-mode="teacher"] #teacherView .studentActionTile:has(input.bulkTxStudent:checked) .tileName{
+  color:#1d4ed8!important;
+}
+
+
+/* v173: 신용도 등급 색상 specificity 최종 수정
+   v170의 body[data-mode] #studentView .rankTable .pill 흰색 규칙이 더 강해서
+   .credit-b/.credit-d 색상이 먹지 않던 문제를 더 높은 선택자로 덮어쓴다. */
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-s,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-s,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-s,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-s,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-s,
+html body[data-mode="teacher"] #teacherView table .pill.credit-s,
+html body .rankTable td[data-label="신용도"] .pill.credit-s,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="S"]{
+  background:#ecfdf5!important;background-image:none!important;color:#047857!important;border-color:#a7f3d0!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-a,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-a,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-a,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-a,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-a,
+html body[data-mode="teacher"] #teacherView table .pill.credit-a,
+html body .rankTable td[data-label="신용도"] .pill.credit-a,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="A"]{
+  background:#dbeafe!important;background-image:none!important;color:#1d4ed8!important;border-color:#bfdbfe!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-b,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-b,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-b,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-b,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-b,
+html body[data-mode="teacher"] #teacherView table .pill.credit-b,
+html body .rankTable td[data-label="신용도"] .pill.credit-b,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="B"]{
+  background:#f0fdfa!important;background-image:none!important;color:#0f766e!important;border-color:#99f6e4!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-c,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-c,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-c,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-c,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-c,
+html body[data-mode="teacher"] #teacherView table .pill.credit-c,
+html body .rankTable td[data-label="신용도"] .pill.credit-c,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="C"]{
+  background:#fef9c3!important;background-image:none!important;color:#854d0e!important;border-color:#fde68a!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-d,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-d,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-d,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-d,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-d,
+html body[data-mode="teacher"] #teacherView table .pill.credit-d,
+html body .rankTable td[data-label="신용도"] .pill.credit-d,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="D"]{
+  background:#ffedd5!important;background-image:none!important;color:#c2410c!important;border-color:#fed7aa!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill.credit-e,
+html body[data-mode="student"] #studentView .rankTable .pill.credit-e,
+html body[data-mode="student"] #studentView .fullRankSection .pill.credit-e,
+html body[data-mode="student"] #studentView .visitPage .rankTable .pill.credit-e,
+html body[data-mode="teacher"] #teacherView .rankTable .pill.credit-e,
+html body[data-mode="teacher"] #teacherView table .pill.credit-e,
+html body .rankTable td[data-label="신용도"] .pill.credit-e,
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade="E"]{
+  background:#fee2e2!important;background-image:none!important;color:#b91c1c!important;border-color:#fecaca!important;
+}
+html body[data-mode="student"] #studentView .rankTable td[data-label="신용도"] .pill[class*="credit-"],
+html body[data-mode="student"] #studentView .rankTable .pill[class*="credit-"],
+html body[data-mode="teacher"] #teacherView table .pill[class*="credit-"],
+html body .rankTable td[data-label="신용도"] .pill[data-credit-grade]{
+  border-width:1px!important;border-style:solid!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  min-width:74px!important;padding:4px 10px!important;border-radius:999px!important;
+  font-size:12px!important;font-weight:900!important;line-height:1.2!important;white-space:nowrap!important;
+  opacity:1!important;filter:none!important;text-shadow:none!important;box-shadow:none!important;
+}
+
+/* v175 신용카드 시스템 */
+.creditCardPage,.creditCardAdminPage{display:grid;gap:16px}
+.creditCardHeroPanel{border:1px solid #dbeafe;background:linear-gradient(135deg,#eff6ff 0%,#f5f3ff 100%)}
+.creditCardStudentTop{display:grid;grid-template-columns:minmax(240px,380px) 1fr;gap:16px;align-items:stretch}
+.creditCardPreview{min-height:190px;border-radius:18px;padding:22px;color:#fff;background:linear-gradient(135deg,#2563eb 0%,#7c3aed 72%,#a855f7 100%);box-shadow:0 18px 40px rgba(37,99,235,.22);display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;position:relative}
+.creditCardPreview:after{content:"";position:absolute;right:-48px;bottom:-60px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.16)}
+.creditCardPreviewTop,.creditCardPreview>div:last-child{display:flex;justify-content:space-between;gap:12px;align-items:center;position:relative;z-index:1}
+.creditCardPreview strong{font-size:28px;letter-spacing:0;position:relative;z-index:1}
+.creditCardPreview em{font-style:normal;opacity:.86;position:relative;z-index:1}
+.creditCardPreview b{background:rgba(255,255,255,.18);padding:5px 10px;border-radius:999px}
+.creditCardHelpBox{border:1px solid #ddd6fe;background:#fff;border-radius:12px;padding:16px;color:#334155}
+.creditCardStatGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.creditCardStat{border:1px solid #dbeafe;background:#fff;border-radius:12px;padding:14px;box-shadow:0 8px 22px rgba(59,130,246,.08)}
+.creditCardStat span{display:block;color:#64748b;font-size:13px;font-weight:800}
+.creditCardStat b{display:block;margin-top:6px;color:#1e3a8a;font-size:22px;line-height:1.15}
+.creditCardStat em{display:block;margin-top:4px;color:#7c3aed;font-style:normal;font-size:12px;font-weight:800}
+.creditCardAdminTable input{max-width:110px}
+.compactSelect{max-width:160px;min-height:34px;padding:6px 8px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:12px}
+@media (max-width:768px){
+  .creditCardStudentTop{grid-template-columns:1fr}
+  .creditCardPreview{min-height:170px;border-radius:14px}
+  .creditCardPreview strong{font-size:24px}
+  .creditCardStatGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .compactSelect{width:100%;max-width:none}
+}
+
+/* v176 student mobile app polish */
+@media (max-width:768px){
+  html body[data-mode="student"]{
+    background:#eef6ff!important;
+  }
+  html body[data-mode="student"] .wrap{
+    background:linear-gradient(180deg,#eef6ff 0%,#f8fbff 48%,#f2f7ff 100%)!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell,
+  html body[data-mode="student"] #studentView .tabletMain,
+  html body[data-mode="student"] #studentView .tabletContent{
+    background:transparent!important;
+  }
+  html body[data-mode="student"] #studentView .tabletContent{
+    padding:16px 16px 104px!important;
+  }
+  html body[data-mode="student"] #studentView .section,
+  html body[data-mode="student"] #studentView .card,
+  html body[data-mode="student"] #studentView .peerHomePanel,
+  html body[data-mode="student"] #studentView .peerInfoCard{
+    border-radius:22px!important;
+    border:1px solid rgba(203,213,225,.82)!important;
+    background:#fff!important;
+    box-shadow:0 14px 34px rgba(30,64,175,.08)!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs{
+    position:fixed!important;
+    left:14px!important;right:14px!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;
+    z-index:80!important;
+    height:68px!important;
+    padding:8px!important;
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:6px!important;
+    border:1px solid rgba(226,232,240,.92)!important;
+    border-radius:26px!important;
+    background:rgba(255,255,255,.94)!important;
+    box-shadow:0 18px 46px rgba(15,23,42,.16)!important;
+    backdrop-filter:blur(16px)!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs button{
+    min-width:0!important;height:52px!important;padding:4px 2px!important;
+    border:0!important;border-radius:18px!important;background:transparent!important;color:#64748b!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:2px!important;
+    box-shadow:none!important;font-size:11px!important;font-weight:900!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs button.active{
+    background:linear-gradient(135deg,#dbeafe,#ede9fe)!important;color:#2563eb!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs .msIcon{
+    font-size:23px!important;line-height:1!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs .tabLabel{
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-page{
+    display:grid!important;gap:16px!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-heading h2{
+    margin:0!important;color:#0f172a!important;font-size:28px!important;font-weight:1000!important;letter-spacing:0!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-heading p{
+    margin:4px 0 0!important;color:#64748b!important;font-size:14px!important;font-weight:800!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-card{
+    display:grid!important;grid-template-columns:70px minmax(0,1fr)!important;gap:14px!important;align-items:center!important;
+    padding:16px!important;border-radius:24px!important;
+    background:linear-gradient(135deg,#dff7ef 0%,#dbeafe 52%,#ede9fe 100%)!important;
+    box-shadow:0 16px 38px rgba(37,99,235,.12)!important;border:1px solid rgba(255,255,255,.72)!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-avatar{
+    width:70px;height:70px;border-radius:22px;background:#fff;display:grid;place-items:center;overflow:hidden;
+    box-shadow:0 10px 24px rgba(15,23,42,.11);
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-main span,
+  html body[data-mode="student"] #studentView .mobile-menu-profile-stats span{
+    display:block;color:#475569;font-size:12px;font-weight:900;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-main b{
+    display:block;margin-top:2px;color:#0f172a;font-size:22px;line-height:1.1;font-weight:1000;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-main em{
+    display:block;margin-top:5px;color:#334155;font-style:normal;font-size:13px;font-weight:800;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-stats{
+    grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-stats>div{
+    border-radius:18px;background:rgba(255,255,255,.76);padding:11px 12px;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-profile-stats b{
+    display:block;margin-top:4px;color:#1e3a8a;font-size:17px;font-weight:1000;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-credit-grade{
+    padding:4px 8px;border-radius:999px;background:#fff;color:#0f172a!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group{
+    display:grid!important;gap:9px!important;margin-top:6px!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group h3{
+    margin:4px 2px 0!important;color:#334155!important;font-size:13px!important;font-weight:1000!important;letter-spacing:0!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuGrid{
+    display:grid!important;grid-template-columns:1fr!important;gap:10px!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard{
+    min-height:76px!important;padding:12px 42px 12px 14px!important;border-radius:20px!important;
+    border:1px solid #e2e8f0!important;background:#fff!important;box-shadow:0 10px 24px rgba(15,23,42,.06)!important;
+    display:grid!important;grid-template-columns:50px minmax(0,1fr) auto!important;grid-template-rows:auto auto!important;gap:3px 12px!important;text-align:left!important;position:relative!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard:after{
+    content:"›";position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:28px;font-weight:900;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard>span:first-child{
+    grid-row:1/3;width:50px!important;height:50px!important;border-radius:17px!important;background:#eef6ff!important;color:#2563eb!important;
+    display:grid!important;place-items:center!important;font-size:25px!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard b{
+    color:#0f172a!important;font-size:16px!important;line-height:1.15!important;font-weight:1000!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard small{
+    color:#64748b!important;font-size:12.5px!important;line-height:1.25!important;font-weight:750!important;
+  }
+  html body[data-mode="student"] #studentView .mobile-menu-group .mobileMenuCard em{
+    grid-column:3;grid-row:1/3;align-self:center;margin-right:10px;border-radius:999px;background:#ecfeff;color:#0369a1;padding:5px 8px;font-style:normal;font-size:11px;font-weight:1000;
+  }
+  html body[data-mode="student"] #studentView .browse-list-page{
+    display:grid!important;gap:14px!important;
+  }
+  html body[data-mode="student"] #studentView .browse-list-hero{
+    padding:18px!important;border-radius:24px!important;background:linear-gradient(135deg,#dcfce7,#dbeafe)!important;border:1px solid rgba(255,255,255,.75)!important;box-shadow:0 14px 34px rgba(37,99,235,.1)!important;
+  }
+  html body[data-mode="student"] #studentView .browse-list-hero h2{margin:0!important;color:#0f172a!important;font-size:28px!important;font-weight:1000!important}
+  html body[data-mode="student"] #studentView .browse-list-hero p{margin:5px 0 0!important;color:#475569!important;font-weight:800!important}
+  html body[data-mode="student"] #studentView .browse-list-tools{display:grid!important;gap:10px!important}
+  html body[data-mode="student"] #studentView .browse-list-search{
+    height:48px;border-radius:18px;background:#fff;border:1px solid #dbeafe;display:flex;align-items:center;gap:8px;padding:0 14px;box-shadow:0 10px 22px rgba(15,23,42,.05);
+  }
+  html body[data-mode="student"] #studentView .browse-list-search input{border:0!important;outline:0!important;min-width:0;flex:1;font-weight:800;color:#0f172a;background:transparent!important}
+  html body[data-mode="student"] #studentView .browse-list-chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+  html body[data-mode="student"] #studentView .browse-list-chips button{
+    flex:0 0 auto;border:1px solid #dbeafe;border-radius:999px;background:#fff;color:#2563eb;padding:9px 13px;font-size:12px;font-weight:1000;box-shadow:0 8px 18px rgba(37,99,235,.06)
+  }
+  html body[data-mode="student"] #studentView .browse-list-chips button.active{background:#2563eb;color:#fff;border-color:#2563eb}
+  html body[data-mode="student"] #studentView .browse-list-grid{display:grid!important;gap:12px!important}
+  html body[data-mode="student"] #studentView .friend-card-item{
+    width:100%;min-height:132px;padding:12px;border:1px solid #e2e8f0;border-radius:24px;background:#fff;box-shadow:0 14px 32px rgba(15,23,42,.08);
+    display:grid;grid-template-columns:76px minmax(0,1fr) 24px;gap:12px;align-items:center;text-align:left;position:relative;overflow:hidden;color:#0f172a;
+  }
+  html body[data-mode="student"] #studentView .friend-card-style-mini{position:absolute;inset:0;opacity:.18;pointer-events:none}
+  html body[data-mode="student"] #studentView .friend-card-style-mini .home-style-preview{height:100%;border:0;border-radius:0;box-shadow:none}
+  html body[data-mode="student"] #studentView .friend-card-avatar{width:76px;height:76px;border-radius:24px;background:#eff6ff;display:grid;place-items:center;overflow:hidden;position:relative;z-index:1}
+  html body[data-mode="student"] #studentView .friend-card-main{position:relative;z-index:1;min-width:0}
+  html body[data-mode="student"] #studentView .friend-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  html body[data-mode="student"] #studentView .friend-card-top b{font-size:18px;font-weight:1000;color:#0f172a}
+  html body[data-mode="student"] #studentView .friend-card-top span{border-radius:999px;background:#eef6ff;color:#2563eb;padding:4px 8px;font-size:11px;font-weight:1000}
+  html body[data-mode="student"] #studentView .friend-card-main p{margin:4px 0;color:#64748b;font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html body[data-mode="student"] #studentView .friend-card-jobs,
+  html body[data-mode="student"] #studentView .friend-detail-badges,
+  html body[data-mode="student"] #studentView .home-style-chips{display:flex;gap:6px;flex-wrap:wrap}
+  html body[data-mode="student"] #studentView .friend-card-job,
+  html body[data-mode="student"] #studentView .friend-detail-badges span,
+  html body[data-mode="student"] #studentView .home-style-chips span{border-radius:999px;background:#f0fdf4;color:#166534;padding:4px 8px;font-size:11px;font-weight:900}
+  html body[data-mode="student"] #studentView .friend-card-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  html body[data-mode="student"] #studentView .friend-card-stats span{display:inline-flex;align-items:center;gap:3px;border-radius:999px;background:#f8fafc;color:#334155;padding:5px 8px;font-size:11px;font-weight:900}
+  html body[data-mode="student"] #studentView .friend-card-credit{background:#fff7ed!important;color:#9a3412!important}
+  html body[data-mode="student"] #studentView .browse-list-empty,
+  html body[data-mode="student"] #studentView .friend-detail-empty{
+    padding:22px;border-radius:22px;background:#fff;border:1px solid #dbeafe;text-align:center;color:#64748b;box-shadow:0 12px 28px rgba(15,23,42,.06)
+  }
+  html body[data-mode="student"] #studentView .browse-list-empty span,
+  html body[data-mode="student"] #studentView .friend-detail-empty span{display:grid;place-items:center;width:54px;height:54px;margin:0 auto 8px;border-radius:18px;background:#eef6ff;color:#2563eb}
+  html body[data-mode="student"] #studentView .browse-list-empty b,
+  html body[data-mode="student"] #studentView .friend-detail-empty b{display:block;color:#0f172a;font-size:16px;font-weight:1000}
+  html body[data-mode="student"] #studentView .browse-list-empty p,
+  html body[data-mode="student"] #studentView .friend-detail-empty p{margin:4px 0 0}
+  html body[data-mode="student"] #studentView .friend-detail-page{display:grid!important;gap:14px!important}
+  html body[data-mode="student"] #studentView .friend-detail-hero{
+    position:relative;overflow:hidden;padding:18px!important;border-radius:26px!important;background:linear-gradient(135deg,var(--peer-soft,#dcfce7),#dbeafe)!important;border:1px solid rgba(255,255,255,.8)!important;box-shadow:0 16px 38px rgba(37,99,235,.12)!important;
+  }
+  html body[data-mode="student"] #studentView .friend-detail-hero:before{content:"";position:absolute;right:-32px;top:-28px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.35)}
+  html body[data-mode="student"] #studentView .friend-detail-hero:after{content:"";position:absolute;left:20px;bottom:14px;width:6px;height:6px;border-radius:50%;background:#60a5fa;box-shadow:28px -22px #a7f3d0,70px 8px #c4b5fd,116px -30px #bfdbfe}
+  html body[data-mode="student"] #studentView .friend-detail-hero-body{position:relative;z-index:1;display:grid;grid-template-columns:112px minmax(0,1fr);gap:14px;align-items:center}
+  html body[data-mode="student"] #studentView .friend-detail-avatar{width:112px;height:112px;border-radius:34px;background:rgba(255,255,255,.82);display:grid;place-items:center;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.11)}
+  html body[data-mode="student"] #studentView .friend-detail-hero h2{margin:0;color:#0f172a;font-size:28px;font-weight:1000;letter-spacing:0}
+  html body[data-mode="student"] #studentView .friend-detail-hero p{margin:3px 0;color:#475569;font-weight:900}
+  html body[data-mode="student"] #studentView .friend-detail-hero em{display:block;margin:4px 0 8px;color:#334155;font-style:normal;font-size:13px;font-weight:800}
+  html body[data-mode="student"] #studentView .friend-detail-credit{background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1}
+  html body[data-mode="student"] #studentView .friend-detail-total{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;margin-top:14px;border-radius:999px;background:#fff;color:#1e3a8a;padding:8px 12px;font-size:13px;font-weight:1000}
+  html body[data-mode="student"] #studentView .friend-detail-stat-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  html body[data-mode="student"] #studentView .friend-detail-stat-grid .peerInfoCard{padding:13px!important;min-height:86px!important}
+  html body[data-mode="student"] #studentView .friend-detail-stat-grid span{display:flex;align-items:center;gap:5px;color:#64748b;font-size:12px;font-weight:900}
+  html body[data-mode="student"] #studentView .friend-detail-stat-grid b{display:block;margin-top:8px;color:#0f172a;font-size:16px;font-weight:1000;line-height:1.2}
+  html body[data-mode="student"] #studentView .friend-detail-panel{padding:16px!important}
+  html body[data-mode="student"] #studentView .home-style-preview{
+    position:relative;height:220px;border-radius:24px;overflow:hidden;border:1px solid #dbeafe;background:linear-gradient(180deg,#f8fbff 0 65%,#e0f2fe 65% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.8)
+  }
+  html body[data-mode="student"] #studentView .home-style-preview.mini{height:100%;min-height:132px}
+  html body[data-mode="student"] #studentView .home-style-wall{position:absolute;inset:0 0 36%;background-color:var(--peer-soft,#dcfce7);background-image:radial-gradient(circle at 12px 12px,rgba(37,99,235,.12) 2px,transparent 3px);background-size:26px 26px}
+  html body[data-mode="student"] #studentView .home-style-rug{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:62%;height:38px;border-radius:50%;background:linear-gradient(90deg,#bfdbfe,#ddd6fe)}
+  html body[data-mode="student"] #studentView .home-style-avatar{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);width:92px;height:92px;display:grid;place-items:center;z-index:2}
+  html body[data-mode="student"] #studentView .home-style-frame{position:absolute;left:18px;top:22px;width:54px;height:42px;border:6px solid #fff;border-radius:12px;background:linear-gradient(135deg,#bfdbfe,#a7f3d0);box-shadow:0 8px 16px rgba(15,23,42,.08)}
+  html body[data-mode="student"] #studentView .home-style-shelf{position:absolute;right:16px;top:42px;width:78px;height:10px;border-radius:999px;background:#94a3b8}
+  html body[data-mode="student"] #studentView .home-style-shelf span,
+  html body[data-mode="student"] #studentView .home-style-shelf b,
+  html body[data-mode="student"] #studentView .home-style-shelf em{position:absolute;bottom:8px;width:16px;height:28px;border-radius:6px;background:#60a5fa}
+  html body[data-mode="student"] #studentView .home-style-shelf b{left:24px;height:20px;background:#a78bfa}
+  html body[data-mode="student"] #studentView .home-style-shelf em{left:48px;height:24px;background:#34d399}
+  html body[data-mode="student"] #studentView .home-style-lamp{position:absolute;right:34px;bottom:58px;width:32px;height:56px;border-radius:18px 18px 8px 8px;background:#fde68a;box-shadow:0 0 28px rgba(253,230,138,.72)}
+  html body[data-mode="student"] #studentView .home-style-plant{position:absolute;left:24px;bottom:36px;width:42px;height:48px;border-radius:0 0 18px 18px;background:#86efac}
+  html body[data-mode="student"] #studentView .home-style-plant:before{content:"";position:absolute;left:-8px;right:-8px;top:-20px;height:34px;border-radius:50%;background:#22c55e}
+  html body[data-mode="student"] #studentView .home-style-stickers span{position:absolute;width:12px;height:12px;border-radius:50%;background:var(--peer-accent,#60a5fa);opacity:.55}
+  html body[data-mode="student"] #studentView .home-style-stickers span:nth-child(1){left:30%;top:18%}
+  html body[data-mode="student"] #studentView .home-style-stickers span:nth-child(2){left:62%;top:24%;background:#a78bfa}
+  html body[data-mode="student"] #studentView .home-style-stickers span:nth-child(3){left:46%;top:12%;background:#34d399}
+  html body[data-mode="student"] #studentView .home-style-chips{margin-top:10px}
+  html body[data-mode="student"] #studentView .friend-detail-asset-wrap .assetPieWrap{grid-template-columns:1fr!important;justify-items:center!important;max-width:360px!important;margin:0 auto!important}
+  html body[data-mode="student"] #studentView .friend-detail-asset-wrap .assetPieSvgBox{width:190px!important;height:190px!important}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list{display:grid;gap:9px}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list>div{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list span{grid-row:1/3;width:38px;height:38px;border-radius:14px;background:#eef6ff;color:#2563eb;display:grid;place-items:center}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list b{min-width:0;color:#0f172a;font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list em{font-style:normal;font-size:13px;font-weight:1000}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list em.gain{color:#059669}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list em.loss{color:#dc2626}
+  html body[data-mode="student"] #studentView .friend-detail-activity-list small{grid-column:2/4;color:#64748b;font-weight:800}
+  html body[data-mode="student"] #studentView .mobileSubHeader{position:sticky;top:0;z-index:20;margin:-16px -16px 12px;padding:12px 16px;background:rgba(238,246,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(203,213,225,.72)}
+  html body[data-mode="student"] #studentView .mobileSubHeader button{min-height:42px;border-radius:16px;background:#fff;color:#2563eb;border:1px solid #dbeafe;font-weight:1000}
+}
+
+/* v177 final mobile nav alignment override */
+@media (max-width:768px){
+  html body[data-mode="student"] #studentView .tabletContent{padding-bottom:128px!important}
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar{
+    position:fixed!important;left:50%!important;right:auto!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;transform:translateX(-50%)!important;
+    width:min(430px,calc(100vw - 28px))!important;max-width:calc(100vw - 28px)!important;height:66px!important;min-height:66px!important;max-height:66px!important;box-sizing:border-box!important;
+    display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:center!important;justify-items:stretch!important;gap:6px!important;margin:0!important;padding:7px!important;overflow:visible!important;
+    border-radius:24px!important;border:1px solid rgba(226,232,240,.95)!important;background:rgba(255,255,255,.96)!important;box-shadow:0 16px 38px rgba(15,23,42,.15)!important;z-index:120!important;
+  }
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"],
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"]{
+    position:relative!important;inset:auto!important;grid-row:auto!important;width:100%!important;min-width:0!important;max-width:none!important;height:52px!important;min-height:52px!important;max-height:52px!important;
+    inline-size:auto!important;block-size:52px!important;min-inline-size:0!important;max-inline-size:none!important;min-block-size:52px!important;max-block-size:52px!important;flex:0 1 auto!important;aspect-ratio:auto!important;
+    justify-self:stretch!important;align-self:center!important;place-self:center stretch!important;transform:none!important;margin:0!important;padding:4px 2px!important;border:0!important;border-radius:17px!important;
+    background:transparent!important;color:#64748b!important;box-shadow:none!important;overflow:hidden!important;box-sizing:border-box!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button.active,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button.active,
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"].active,
+  html body[data-mode="student"] #studentView .tabletMain > .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"].active{
+    background:linear-gradient(135deg,#dbeafe,#ede9fe)!important;color:#2563eb!important;border:0!important;box-shadow:none!important;
+  }
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="finance"]{grid-column:1!important;order:1!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="market"]{grid-column:2!important;order:2!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="dashboard"]{grid-column:3!important;order:3!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="noticeboard"]{grid-column:4!important;order:4!important}
+  html body[data-mode="student"] #studentView .studentTabs.topTabs.student-bottom-nav-bar > button[data-tab="more"]{grid-column:5!important;order:5!important}
+}
+
+/* v178 market/bank mobile app refresh */
+@media (max-width:768px){
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .tabletContent,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .tabletContent{
+    padding-top:18px!important;
+    background:linear-gradient(180deg,#eef6ff 0%,#f8fbff 55%,#f3f7ff 100%)!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .tabletContent > .section:first-child,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .tabletContent > .section:first-child,
+  html body[data-mode="student"] #studentView .financePage.bankPage > .bankHero{
+    position:relative!important;
+    overflow:hidden!important;
+    border-radius:28px!important;
+    padding:18px!important;
+    border:1px solid rgba(255,255,255,.8)!important;
+    background:linear-gradient(135deg,#e0f7f2 0%,#dbeafe 52%,#ede9fe 100%)!important;
+    box-shadow:0 16px 38px rgba(37,99,235,.12)!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .tabletContent > .section:first-child:after,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .tabletContent > .section:first-child:after,
+  html body[data-mode="student"] #studentView .financePage.bankPage > .bankHero:after{
+    content:"";position:absolute;right:-34px;top:-34px;width:132px;height:132px;border-radius:50%;background:rgba(255,255,255,.38);pointer-events:none;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .head,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .head{
+    position:relative;z-index:1;align-items:flex-start!important;gap:10px!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .head h2,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .head h2{
+    color:#0f172a!important;font-size:30px!important;line-height:1.05!important;font-weight:1000!important;letter-spacing:0!important;margin:0!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .head .sub,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .head .sub{
+    color:#475569!important;font-size:13px!important;font-weight:900!important;line-height:1.45!important;margin-top:6px!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .currentAssetPill,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .currentAssetPill{
+    position:relative;z-index:1;background:rgba(255,255,255,.78)!important;border:1px solid rgba(191,219,254,.9)!important;color:#1e3a8a!important;border-radius:999px!important;
+    box-shadow:none!important;font-weight:1000!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuGrid,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuGrid{
+    position:relative;z-index:1;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;margin-top:14px!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard{
+    min-height:116px!important;border-radius:22px!important;padding:14px!important;background:rgba(255,255,255,.86)!important;border:1px solid rgba(191,219,254,.9)!important;
+    box-shadow:0 12px 28px rgba(30,64,175,.08)!important;display:grid!important;grid-template-columns:46px minmax(0,1fr) 18px!important;align-items:center!important;gap:10px!important;text-align:left!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard .menuCardIcon,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard > span:first-child,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard > span:first-child{
+    width:46px!important;height:46px!important;border-radius:16px!important;background:#eff6ff!important;color:#2563eb!important;display:grid!important;place-items:center!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard b,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard b{
+    color:#0f172a!important;font-size:15px!important;font-weight:1000!important;line-height:1.2!important;white-space:normal!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard small,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard small{
+    color:#64748b!important;font-size:11px!important;font-weight:800!important;line-height:1.35!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard em,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard em{
+    grid-column:1/2;justify-self:start;align-self:end;border-radius:999px!important;background:#f8fafc!important;color:#1e3a8a!important;border:1px solid #dbeafe!important;
+    padding:5px 8px!important;font-size:11px!important;font-weight:1000!important;font-style:normal!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuCard:after,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuCard:after{
+    content:"›";grid-column:3;color:#94a3b8;font-size:24px;font-weight:700;
+  }
+  html body[data-mode="student"] #studentView .financePage.bankPage,
+  html body[data-mode="student"] #studentView .marketListStack,
+  html body[data-mode="student"] #studentView .marketSellerDeckGrid{
+    display:grid!important;gap:14px!important;
+  }
+  html body[data-mode="student"] #studentView .bankSummaryGrid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;position:relative;z-index:1;
+  }
+  html body[data-mode="student"] #studentView .bankSummaryGrid .tabletStat,
+  html body[data-mode="student"] #studentView .bankbookSelectPanel,
+  html body[data-mode="student"] #studentView .bankbookDetailPanel,
+  html body[data-mode="student"] #studentView .marketSellerDeck,
+  html body[data-mode="student"] #studentView .marketListing,
+  html body[data-mode="student"] #studentView .marketSellerGroup{
+    border-radius:22px!important;border:1px solid rgba(203,213,225,.86)!important;background:#fff!important;box-shadow:0 14px 34px rgba(30,64,175,.08)!important;
+  }
+}
+@media (max-width:430px){
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .mobileMenuGrid,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .mobileMenuGrid{
+    grid-template-columns:1fr!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .head,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .head{
+    display:block!important;
+  }
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="market"] .currentAssetPill,
+  html body[data-mode="student"] #studentView .tabletAppShell[data-student-tab="finance"] .currentAssetPill{
+    margin-top:10px!important;
+  }
+}
+
+/* v179 shared credit-card art: dashboard and card tab use the same visual */
+.creditCardPreviewArt{
+  width:100%!important;
+  min-height:170px!important;
+  display:grid!important;
+  align-content:space-between!important;
+  gap:12px!important;
+  padding:18px!important;
+  border:0!important;
+  border-radius:18px!important;
+  text-align:left!important;
+  color:#fff!important;
+  background:linear-gradient(135deg,var(--student-accent-2,#7fc7ff) 0%,var(--student-accent,#6558f5) 100%)!important;
+  box-shadow:0 18px 34px rgba(101,88,245,.24)!important;
+  position:relative!important;
+  overflow:hidden!important;
+  box-sizing:border-box!important;
+}
+.creditCardPreviewArt:after{
+  content:""!important;
+  position:absolute!important;
+  right:-44px!important;
+  bottom:-58px!important;
+  width:150px!important;
+  height:150px!important;
+  border-radius:50%!important;
+  background:rgba(255,255,255,.18)!important;
+  pointer-events:none!important;
+}
+button.creditCardPreviewArt{cursor:pointer!important;font:inherit!important}
+.creditCardPreviewArt > span,
+.creditCardPreviewArt .msIcon,
+.creditCardPreviewArt b,
+.creditCardPreviewArt em{position:relative!important;z-index:1!important}
+.creditCardPreviewArt > span{font-size:14px!important;font-weight:1000!important}
+.creditCardPreviewArt .msIcon{justify-self:end!important;font-size:38px!important;color:#fff!important}
+.creditCardPreviewArt b{font-size:34px!important;line-height:1!important;background:transparent!important;padding:0!important;color:#fff!important}
+.creditCardPreviewArt em{font-style:normal!important;font-size:12px!important;font-weight:800!important;color:rgba(255,255,255,.84)!important}
+html body[data-mode="student"] #studentView .creditCardPage .creditCardPreviewArt{
+  min-height:190px!important;
 }

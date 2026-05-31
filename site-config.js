@@ -1,4 +1,4 @@
-/*
+﻿/*
   Change hub for economy-site.
 
   Use this file for frequent tuning:
@@ -11,22 +11,22 @@
 
 window.ECONOMY_SITE_CONFIG = {
   meta: {
-    version: "59",
-    label: "v59 warning appeal and ticket repair"
+    version: "174",
+    label: "v174 bulk payment selection"
   },
 
   theme: {
     tokens: {
-      "body-bg": "linear-gradient(135deg,#e0ecff,#f8fafc,#e7f6f2)",
-      "hero-bg": "radial-gradient(circle at top left,#1d4ed8 0,#020617 45%,#111827 100%)",
-      "radius-hero": "28px",
+      "body-bg": "#f4f7fb",
+      "hero-bg": "linear-gradient(135deg,#4d8c3e 0%,#2f6d36 100%)",
+      "radius-hero": "24px",
       "radius-section": "22px",
-      "radius-card": "20px",
-      "radius-control": "14px",
-      "blue": "#2563eb",
-      "green": "#0f766e",
+      "radius-card": "22px",
+      "radius-control": "16px",
+      "blue": "#4f87ff",
+      "green": "#4c8f3a",
       "red": "#dc2626",
-      "orange": "#f59e0b",
+      "orange": "#ff6a1a",
       "purple": "#7c3aed"
     }
   },
@@ -51,6 +51,12 @@ window.ECONOMY_SITE_CONFIG = {
     firebaseDelayWarningMs: 5000,
     toastMs: 2600,
     requirePurchaseConfirm: true
+  },
+
+  notifications: {
+    // Firebase Console > Project settings > Cloud Messaging > Web Push certificates
+    // 이 공개키를 넣어야 앱이 완전히 닫혀 있어도 FCM 푸시를 받을 수 있습니다.
+    webPushVapidKey: "BJX5ynQQjfOTXrvdlT4T0yHkBmN9iUtR8zlRjyAT3WF8OnZ9myjQkwb0WIJEh35aR4t7gDK-P6wjn0KD-S2JPmk"
   },
 
   featureFlags: {
