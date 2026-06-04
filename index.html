@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>경제교실 온라인 운영 사이트 Firebase v174</title>
+  <title>경제교실 온라인 운영 사이트 Firebase v175</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#4c8f3a" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -15,14 +15,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&display=swap" rel="stylesheet" />
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-  <link rel="stylesheet" href="styles.css?v=174" />
+  <link rel="stylesheet" href="styles.css?v=175" />
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
     <div>
       <h1>경제교실 온라인 운영 사이트</h1>
-      <p>Firebase Realtime Database로 교사 컴퓨터와 학생 태블릿이 같은 장부를 봅니다. <b style="color:#bfdbfe">v174</b></p>
+      <p>Firebase Realtime Database로 교사 컴퓨터와 학생 태블릿이 같은 장부를 봅니다. <b style="color:#bfdbfe">v175</b></p>
     </div>
     <div class="topBtns">
       <button onclick="askTeacherPassword()">교사용</button>
@@ -36,7 +36,7 @@
     <button class="mobileSwitchStudent" onclick="switchToStudentMode()">👦 학생용</button>
   </div>
 
-  <div id="status" class="section"><b>Firebase 연결 중...</b><div class="small">v174 상금 지급 선택 표시</div></div>
+  <div id="status" class="section"><b>Firebase 연결 중...</b><div class="small">v175 학급회의</div></div>
 
   <nav id="teacherTabs" class="tabs hidden">
     <button class="active" data-tab="dashboard" onclick="setTab('dashboard')">대시보드</button>
@@ -47,6 +47,7 @@
     <button data-tab="industry" onclick="setTab('industry')">산업</button>
     <button data-tab="tickets" onclick="setTab('tickets')">티켓시장</button>
     <button data-tab="finance" onclick="setTab('finance')">예금·채권</button>
+    <button data-tab="classMeetings" onclick="setTab('classMeetings')">학급회의</button>
     <button data-tab="noticeboard" onclick="setTab('noticeboard')">알림장</button>
     <button data-tab="ledger" onclick="setTab('ledger')">거래장부</button>
     <button data-tab="settings" onclick="setTab('settings')">설정</button>
@@ -62,6 +63,7 @@
     <section id="tickets" class="tabPage hidden"></section>
     <section id="finance" class="tabPage hidden"></section>
     <section id="creditCards" class="tabPage hidden"></section>
+    <section id="classMeetings" class="tabPage hidden"></section>
     <section id="noticeboard" class="tabPage hidden"></section>
     <section id="ledger" class="tabPage hidden"></section>
     <section id="settings" class="tabPage hidden"></section>
@@ -98,7 +100,7 @@
   </div>
 </div>
 
-<script src="startup.js?v=174"></script>
-<script src="pwa-register.js?v=174"></script>
+<script src="startup.js?v=175"></script>
+<script src="pwa-register.js?v=175"></script>
 </body>
 </html>

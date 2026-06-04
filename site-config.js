@@ -11,8 +11,8 @@
 
 window.ECONOMY_SITE_CONFIG = {
   meta: {
-    version: "174",
-    label: "v174 bulk payment selection"
+    version: "175",
+    label: "v175 class meetings"
   },
 
   theme: {

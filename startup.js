@@ -2,7 +2,7 @@
   window.__ECONOMY_BOOT_STARTED__ = false;
   window.__ECONOMY_FIREBASE_READY__ = false;
 
-  var APP_VERSION = "174";
+  var APP_VERSION = "175";
   var LOCAL_URL = "http://127.0.0.1:5000/";
 
   if(location.protocol === "file:"){

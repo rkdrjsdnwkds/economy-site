@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getDatabase, ref, onValue, set, update, push, remove, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+import { getFirestore, collection, doc, getDocs, onSnapshot, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js";
 import { STATIC_AVATARS } from "./avatar-assets.js";
 import { CUSTOM_AVATARS } from "./custom-avatars.js";
@@ -65,6 +66,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const fsDb = getFirestore(app);
 const rootRef = ref(db, "classEconomy/main");
 const messagingReady = isMessagingSupported()
   .then(supported => supported ? getMessaging(app) : null)
@@ -243,6 +245,17 @@ let activeMessageUnsub = null;
 let subscribedNoticeStudent = "";
 let noticeState = {all:[],student:[],statuses:[],studentStatuses:{},teacherStatuses:[],rooms:[],studentRoom:null,messages:[]};
 let lastStudentMessageSentAt = 0;
+let meetingState = {
+  agendas: [],
+  commentsByAgenda: {},
+  votesByAgenda: {},
+  selectedAgendaId: localStorage.getItem("selectedClassMeetingAgenda") || "",
+  filter: localStorage.getItem("classMeetingFilter") || "all",
+  agendaUnsub: null,
+  detailUnsubs: {},
+  loading: false,
+  error: ""
+};
 let bankLedgerDateFilter = "";
 let bankLedgerPage = 1;
 const BANK_LEDGER_PAGE_SIZE = 8;
@@ -310,6 +323,12 @@ function ensureRequiredEconomyExtensions(){
   if(!defaultData.jobs.snack_retailer){
     defaultData.jobs.snack_retailer={id:"snack_retailer",name:"과자 소매상",wage:0,payType:"자율",slots:4,note:"과자 도매 구매 후 판매 재고를 관리합니다."};
   }
+  if(!defaultData.jobs.president){
+    defaultData.jobs.president={id:"president",name:"회장",wage:0,payType:"자율",slots:1,note:"학급회의 안건 등록, 수정, 상태 변경과 의견 관리를 담당합니다."};
+  }
+  if(!defaultData.jobs.vice_president){
+    defaultData.jobs.vice_president={id:"vice_president",name:"부회장",wage:0,payType:"자율",slots:1,note:"학급회의 안건 등록, 수정과 투표 시작을 돕습니다."};
+  }
 }
 ensureRequiredEconomyExtensions();
 function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
@@ -353,6 +372,7 @@ function arr(o){return Object.values(o || {})}
 function escapeHtml(text=""){
   return String(text).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
 }
+function jsString(value=""){return JSON.stringify(String(value)).replace(/</g,"\\u003c")}
 function sid(){return "s_" + Math.random().toString(36).slice(2,9)}
 function txid(){return "tx_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,6)}
 function toast(msg){const old=document.querySelector(".toast"); if(old) old.remove(); const el=document.createElement("div"); el.className="toast"; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),cfgNum("ux.toastMs",2600))}
@@ -1327,6 +1347,7 @@ function studentNavItems(){
       ["market","시장","shopping_cart"],
       ["dashboard","홈","home"],
       ["noticeboard","알림","notifications"],
+      ["classMeetings","회의","forum"],
       ["more","메뉴","menu"]
     ];
   }
@@ -1342,6 +1363,7 @@ function studentTabCatalog(){
   return [
     {id:"dashboard",name:"대시보드·재산",icon:"⌂",note:"학생 기본 화면"},
     {id:"noticeboard",name:"알림장",icon:"▣",note:"숙제·준비물·공지와 선생님 메시지"},
+    {id:"classMeetings",name:"학급회의",icon:"forum",note:"안건 토론과 투표"},
     {id:"market",name:"시장",icon:"▦",note:"학생 간 판매글"},
     {id:"products",name:"상점·티켓",icon:"▣",note:"상품·티켓 구매"},
     {id:"creditCard",name:"신용카드",icon:"▣",note:"카드 신청·사용·상환"},
@@ -1364,6 +1386,7 @@ function isMobileViewport(){return window.matchMedia?.("(max-width: 768px)")?.ma
 function isPhoneViewport(){return window.matchMedia?.("(max-width: 620px)")?.matches || window.innerWidth<=620}
 window.addEventListener("resize",()=>scheduleRender(120));
 function studentNavBadgeCount(id){
+  if(id==="classMeetings") return meetingBadgeCount();
   if(id!=="noticeboard" || !selectedStudent) return 0;
   const stats=studentNoticeStats(selectedStudent);
   return n(stats.todayCount)+n(stats.uncheckedHomework)+n(stats.unreadMessages);
@@ -1651,11 +1674,637 @@ function handleNotificationClickData(payload){
     localStorage.setItem("studentNoticeTab",selectedNoticeStudentTab);
     render();
   }
+  if(type==="classMeeting"){
+    if(hasTeacherAccess()){
+      mode="teacher";
+      localStorage.setItem("economyMode","teacher");
+      currentTab="classMeetings";
+    }else if(selectedStudent){
+      mode="student";
+      localStorage.setItem("economyMode","student");
+      studentTab="classMeetings";
+      localStorage.setItem("studentTab","classMeetings");
+    }
+    if(payload?.agendaId) openAgenda(payload.agendaId,false);
+    render();
+  }
 }
 if("serviceWorker" in navigator){
   navigator.serviceWorker.addEventListener("message", event=>{
     if(event.data?.type==="ECONOMY_NOTIFICATION_CLICK") handleNotificationClickData(event.data.data || {});
   });
+}
+
+const MEETING_CATEGORIES=["규칙","경제","시장","티켓","직업","벌금","세금","기타"];
+const MEETING_OPTIONS=["찬성","반대","기권"];
+const MEETING_COMMENT_TYPES=["찬성","반대","질문","수정제안","기타"];
+const MEETING_STATUS_META={
+  draft:{label:"작성됨",className:"gray"},
+  discussion:{label:"토론중",className:"blue"},
+  voting:{label:"투표중",className:"purple"},
+  passed:{label:"통과",className:"green"},
+  rejected:{label:"부결",className:"red"},
+  held:{label:"보류",className:"orange"},
+  closed:{label:"종료",className:"gray"}
+};
+
+function meetingDate(value){
+  if(!value) return null;
+  if(value.toDate) return value.toDate();
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function meetingDateMs(value){
+  const d=meetingDate(value);
+  return d ? d.getTime() : 0;
+}
+function meetingDateText(value){
+  const d=meetingDate(value);
+  return d ? seoulDateTimeText(d.toISOString()) : "-";
+}
+function meetingDateShort(value){
+  const d=meetingDate(value);
+  return d ? seoulDateShortText(d.toISOString()) : "-";
+}
+function meetingStatusInfo(status){return MEETING_STATUS_META[status] || MEETING_STATUS_META.draft}
+function meetingStatusBadge(status){
+  const info=meetingStatusInfo(status);
+  return `<span class="meetingStatusBadge ${info.className}">${info.label}</span>`;
+}
+function agendaVoteClosed(agenda){
+  return !!agenda?.voteDeadline && meetingDateMs(agenda.voteDeadline)>0 && meetingDateMs(agenda.voteDeadline)<Date.now();
+}
+function agendaComments(agendaId){
+  return arr(meetingState.commentsByAgenda[agendaId]).filter(c=>!c.isDeleted).sort((a,b)=>meetingDateMs(a.createdAt)-meetingDateMs(b.createdAt));
+}
+function agendaVotes(agendaId){
+  return arr(meetingState.votesByAgenda[agendaId]).filter(v=>v && v.voterId);
+}
+function meetingAgendas(){
+  return arr(meetingState.agendas).filter(a=>!a.isDeleted);
+}
+function meetingAgenda(id){
+  return meetingAgendas().find(a=>a.id===id) || null;
+}
+function meetingBadgeCount(){
+  return meetingAgendas().filter(a=>a.status==="voting" && !agendaVoteClosed(a)).length;
+}
+function meetingJobTexts(s){
+  if(!s) return [];
+  const ids=studentJobIds(s);
+  const values=[
+    ...ids,
+    ...ids.map(id=>job(id)?.name),
+    s.job,
+    s.jobId,
+    s.role,
+    s.position,
+    s.title
+  ];
+  return values.map(v=>String(v||"").trim()).filter(Boolean);
+}
+function isPresident(studentOrId){
+  const s=typeof studentOrId==="string" ? student(studentOrId) : studentOrId;
+  const texts=meetingJobTexts(s);
+  return texts.some(text=>{
+    const compact=text.replace(/\s+/g,"");
+    return compact==="president" || compact==="class_president" || compact==="회장" || compact==="학급회장" || compact==="반장";
+  });
+}
+function isVicePresident(studentOrId){
+  const s=typeof studentOrId==="string" ? student(studentOrId) : studentOrId;
+  const texts=meetingJobTexts(s);
+  return texts.some(text=>{
+    const compact=text.replace(/\s+/g,"");
+    return compact==="vice_president" || compact==="vicepresident" || compact==="부회장" || compact==="학급부회장" || compact==="부반장";
+  });
+}
+function meetingActor(){
+  if(isTeacherMode()) return {role:"teacher",id:TEACHER_ID,name:"선생님",student:null,label:"교사"};
+  const s=student(selectedStudent);
+  if(!s) return {role:"guest",id:"",name:"",student:null,label:"미로그인"};
+  if(isPresident(s)) return {role:"president",id:s.id,name:s.name,student:s,label:"회장"};
+  if(isVicePresident(s)) return {role:"vicePresident",id:s.id,name:s.name,student:s,label:"부회장"};
+  return {role:"student",id:s.id,name:s.name,student:s,label:"학생"};
+}
+function canManageMeeting(user=meetingActor()){return ["teacher","president","vicePresident"].includes(user.role)}
+function canCreateAgenda(user=meetingActor()){return ["teacher","president","vicePresident"].includes(user.role)}
+function canDeleteAgenda(user=meetingActor()){return user.role==="teacher"}
+function canEditAgenda(agenda,user=meetingActor()){
+  if(user.role==="teacher") return true;
+  if(["president","vicePresident"].includes(user.role)) return true;
+  return !!agenda && agenda.proposerId===user.id && ["draft","discussion"].includes(agenda.status);
+}
+function canManageComments(user=meetingActor()){return user.role==="teacher" || user.role==="president"}
+function canChangeAgendaStatus(status,user=meetingActor()){
+  if(user.role==="teacher") return true;
+  if(user.role==="president") return ["discussion","voting","held","closed"].includes(status);
+  if(user.role==="vicePresident") return ["discussion","voting"].includes(status);
+  return false;
+}
+function ensureClassMeetingSubscription(){
+  if(meetingState.agendaUnsub) return;
+  meetingState.loading=true;
+  meetingState.error="";
+  meetingState.agendaUnsub=onSnapshot(collection(fsDb,"classMeetings"), snap=>{
+    meetingState.loading=false;
+    meetingState.error="";
+    meetingState.agendas=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(meetingState.selectedAgendaId && !meetingAgenda(meetingState.selectedAgendaId)){
+      meetingState.selectedAgendaId="";
+      localStorage.removeItem("selectedClassMeetingAgenda");
+    }
+    scheduleRender();
+  }, error=>{
+    console.error("class meeting subscription failed", error);
+    meetingState.loading=false;
+    meetingState.error=error?.message || String(error);
+    scheduleRender();
+  });
+}
+function ensureMeetingDetailSubscription(agendaId){
+  if(!agendaId || meetingState.detailUnsubs[agendaId]) return;
+  const commentUnsub=onSnapshot(collection(fsDb,"classMeetings",agendaId,"comments"), snap=>{
+    meetingState.commentsByAgenda[agendaId]=snap.docs.map(d=>({id:d.id,...d.data()}));
+    scheduleRender();
+  }, error=>console.error("meeting comments subscription failed", error));
+  const voteUnsub=onSnapshot(collection(fsDb,"classMeetings",agendaId,"votes"), snap=>{
+    meetingState.votesByAgenda[agendaId]=snap.docs.map(d=>({id:d.id,...d.data()}));
+    scheduleRender();
+  }, error=>console.error("meeting votes subscription failed", error));
+  meetingState.detailUnsubs[agendaId]=()=>{commentUnsub(); voteUnsub();};
+}
+function sortedMeetingAgendas(){
+  const filter=meetingState.filter || "all";
+  return meetingAgendas()
+    .filter(a=>filter==="all" || a.status===filter)
+    .sort((a,b)=>{
+      const av=a.status==="voting" && !agendaVoteClosed(a) ? 1 : 0;
+      const bv=b.status==="voting" && !agendaVoteClosed(b) ? 1 : 0;
+      if(av!==bv) return bv-av;
+      return Math.max(meetingDateMs(b.updatedAt),meetingDateMs(b.createdAt))-Math.max(meetingDateMs(a.updatedAt),meetingDateMs(a.createdAt));
+    });
+}
+function meetingResultFromVotes(options=MEETING_OPTIONS,votes=[]){
+  const counts={};
+  options.forEach(opt=>{counts[opt]=0;});
+  votes.forEach(v=>{
+    const opt=String(v.selectedOption||"");
+    counts[opt]=n(counts[opt])+1;
+  });
+  const totalVotes=votes.length;
+  const yes=n(counts["찬성"]);
+  const no=n(counts["반대"]);
+  return {totalVotes,optionCounts:counts,passedOption:yes>no ? "찬성" : null};
+}
+function calculateAgendaResult(agendaId){
+  const agenda=meetingAgenda(agendaId);
+  return meetingResultFromVotes(arr(agenda?.options).length?arr(agenda.options):MEETING_OPTIONS,agendaVotes(agendaId));
+}
+function meetingResultSummary(agenda){
+  const result=agenda?.result || calculateAgendaResult(agenda?.id);
+  const counts=obj(result.optionCounts);
+  const total=n(result.totalVotes) || agendaVotes(agenda?.id).length;
+  if(!total) return "아직 투표 없음";
+  return Object.entries(counts).map(([opt,count])=>`${opt} ${count}`).join(" · ");
+}
+function meetingFilteredTabsHtml(){
+  const tabs=[["all","전체"],["discussion","토론중"],["voting","투표중"],["passed","통과"],["rejected","부결"],["held","보류"]];
+  return `<div class="studentTabs meetingFilterTabs">${tabs.map(([id,label])=>`<button class="${meetingState.filter===id?'active':''}" onclick="setMeetingFilter('${id}')">${label}</button>`).join("")}</div>`;
+}
+function meetingCategoryOptions(selected="기타"){
+  return MEETING_CATEGORIES.map(c=>`<option value="${c}" ${c===selected?"selected":""}>${c}</option>`).join("");
+}
+function meetingOptionsText(options){
+  const rows=arr(options).length ? arr(options) : MEETING_OPTIONS;
+  return rows.join("\n");
+}
+function meetingAgendaFormHtml(){
+  const actor=meetingActor();
+  if(!canCreateAgenda(actor)) return `<div class="meetingPermissionHint">${materialIcon("lock","msIcon")} 회장, 부회장, 교사만 안건을 등록할 수 있습니다.</div>`;
+  return `<details class="meetingCreatePanel" open>
+    <summary>${materialIcon("add_circle","msIcon")} 새 안건 등록 <span>${actor.label} 권한</span></summary>
+    <div class="meetingFormGrid">
+      <div class="field"><label>제목</label><input id="meetingTitle" maxlength="80" placeholder="예: 쉬는 시간 시장 운영 규칙"></div>
+      <div class="field"><label>카테고리</label><select id="meetingCategory">${meetingCategoryOptions("기타")}</select></div>
+      <div class="field meetingDescriptionField"><label>설명</label><textarea id="meetingDescription" maxlength="1200" placeholder="왜 이 안건이 필요한지, 어떤 점을 함께 정하면 좋을지 적어주세요."></textarea></div>
+      <div class="field"><label>투표 선택지</label><textarea id="meetingOptions" maxlength="200">${MEETING_OPTIONS.join("\n")}</textarea><div class="small">한 줄에 하나씩 입력합니다. 기본값은 찬성/반대/기권입니다.</div></div>
+    </div>
+    <div class="toolbar"><button class="primary" onclick="createAgenda()">안건 등록</button></div>
+  </details>`;
+}
+function meetingVoteStatsHtml(agenda){
+  const options=arr(agenda.options).length ? arr(agenda.options) : MEETING_OPTIONS;
+  const result=agenda.result && n(agenda.result.totalVotes) ? agenda.result : calculateAgendaResult(agenda.id);
+  const counts=obj(result.optionCounts);
+  const total=n(result.totalVotes);
+  const totalStudents=students().length;
+  const notVoted=Math.max(0,totalStudents-total);
+  return `<div class="meetingResultBars">
+    ${options.map(opt=>{
+      const count=n(counts[opt]);
+      const pct=total ? Math.round(count/total*100) : 0;
+      return `<div class="meetingResultRow"><div><b>${escapeHtml(opt)}</b><span>${count}명 ${pct}%</span></div><i><em style="width:${pct}%"></em></i></div>`;
+    }).join("")}
+    <div class="meetingResultFoot"><span>전체 투표 ${total}명</span>${totalStudents?`<span>미투표 ${notVoted}명</span>`:""}<span>${result.passedOption==="찬성"?"찬성이 반대보다 많습니다. 교사 확정이 필요합니다.":"교사 확정 전 결과입니다."}</span></div>
+  </div>`;
+}
+function meetingVotePanelHtml(agenda){
+  const actor=meetingActor();
+  const options=arr(agenda.options).length ? arr(agenda.options) : MEETING_OPTIONS;
+  const votes=agendaVotes(agenda.id);
+  const myVote=actor.id ? votes.find(v=>v.voterId===actor.id) : null;
+  const votingOpen=agenda.status==="voting" && !agendaVoteClosed(agenda);
+  if(actor.role==="teacher"){
+    return `<div class="meetingVotePanel"><h3>투표 결과</h3>${meetingVoteStatsHtml(agenda)}<p class="small">교사는 투표하지 않습니다. 결과를 보고 통과/부결을 확정합니다.</p></div>`;
+  }
+  if(!selectedStudent) return "";
+  return `<div class="meetingVotePanel"><div class="head compact"><div><h3>투표</h3><div class="sub">${agenda.voteDeadline?`마감 ${meetingDateText(agenda.voteDeadline)}`:"마감 없음"}</div></div>${myVote?`<span class="pill purple">내 선택: ${escapeHtml(myVote.selectedOption)}</span>`:""}</div>
+    ${votingOpen?`<div class="meetingVoteButtons">${options.map(opt=>`<button class="${myVote?.selectedOption===opt?'active':''}" onclick="submitAgendaVote('${agenda.id}',${jsString(opt)})">${escapeHtml(opt)}</button>`).join("")}</div><p class="small">마감 전까지 선택을 바꿀 수 있습니다.</p>`:`<p class="small">${agenda.status==="voting"?"투표 마감 시간이 지났습니다.":"투표중인 안건에서만 투표할 수 있습니다."}</p>`}
+    ${meetingVoteStatsHtml(agenda)}
+  </div>`;
+}
+function meetingCommentFormHtml(agenda){
+  const actor=meetingActor();
+  if(!["discussion","voting"].includes(agenda.status)) return `<p class="small">토론중 또는 투표중 상태에서만 의견을 남길 수 있습니다.</p>`;
+  if(actor.role==="guest") return `<p class="small">학생으로 로그인해야 의견을 남길 수 있습니다.</p>`;
+  return `<div class="meetingCommentForm">
+    <select id="meetingCommentType">${MEETING_COMMENT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join("")}</select>
+    <textarea id="meetingCommentContent" maxlength="600" placeholder="의견을 남겨주세요."></textarea>
+    <button class="blue" onclick="submitAgendaComment('${agenda.id}')">의견 등록</button>
+  </div>`;
+}
+function meetingCommentsHtml(agenda){
+  const actor=meetingActor();
+  const comments=agendaComments(agenda.id);
+  return `<div class="meetingComments"><div class="head compact"><div><h3>토론 의견</h3><div class="sub">${comments.length}개 의견</div></div></div>
+    ${comments.map(c=>`<div class="meetingCommentCard">
+      <div class="meetingCommentMeta"><b>${escapeHtml(c.writerName||"알 수 없음")}</b><span>${escapeHtml(c.writerJob||"")}</span><em>${meetingDateText(c.createdAt)}</em><i>${escapeHtml(c.type||"기타")}</i></div>
+      <p>${escapeHtml(c.content||"").replace(/\n/g,"<br>")}</p>
+      <div class="toolbar">${c.writerId===actor.id?`<button onclick="editAgendaComment('${agenda.id}','${c.id}')">수정</button>`:""}${canManageComments(actor)||c.writerId===actor.id?`<button class="danger" onclick="deleteAgendaComment('${agenda.id}','${c.id}')">삭제</button>`:""}</div>
+    </div>`).join("") || `<p class="small">아직 의견이 없습니다.</p>`}
+    ${meetingCommentFormHtml(agenda)}
+  </div>`;
+}
+function meetingManagePanelHtml(agenda){
+  const actor=meetingActor();
+  if(!canManageMeeting(actor) && !canEditAgenda(agenda,actor)) return "";
+  const statusButtons=[
+    ["discussion","토론중"],
+    ["voting","투표중"],
+    ["held","보류"],
+    ["closed","종료"],
+    ["passed","통과 확정"],
+    ["rejected","부결 확정"]
+  ].filter(([status])=>canChangeAgendaStatus(status,actor));
+  return `<details class="meetingManagePanel" open>
+    <summary>${materialIcon("admin_panel_settings","msIcon")} 관리</summary>
+    <div class="meetingManageActions">
+      ${canEditAgenda(agenda,actor)?`<button onclick="editAgenda('${agenda.id}')">안건 수정</button>`:""}
+      ${statusButtons.map(([status,label])=>`<button class="${status==="passed"?"green":status==="rejected"?"danger":status==="voting"?"purple":""}" onclick="updateAgendaStatus('${agenda.id}','${status}')">${label}</button>`).join("")}
+      ${["teacher","president","vicePresident"].includes(actor.role)?`<label class="meetingDeadlineBox">투표 마감 <input id="meetingDeadline_${agenda.id}" type="datetime-local"></label><button class="purple" onclick="startAgendaVote('${agenda.id}')">투표 시작</button>`:""}
+      ${["teacher","president"].includes(actor.role)?`<button class="orange" onclick="endAgendaVote('${agenda.id}')">투표 종료</button>`:""}
+      ${canDeleteAgenda(actor)?`<button class="danger" onclick="deleteAgenda('${agenda.id}')">삭제</button>`:""}
+    </div>
+    <p class="small">회장은 보류/종료까지 가능하고, 통과/부결 최종 확정과 삭제는 교사만 가능합니다.</p>
+  </details>`;
+}
+function meetingAgendaCardHtml(agenda){
+  const comments=agendaComments(agenda.id);
+  const voteCount=agendaVotes(agenda.id).length || n(agenda.voteCount) || n(agenda.result?.totalVotes);
+  const active=meetingState.selectedAgendaId===agenda.id;
+  return `<button class="meetingAgendaCard ${active?'active':''}" onclick="openAgenda('${agenda.id}')">
+    <div class="meetingAgendaCardTop">${meetingStatusBadge(agenda.status)}<span>${escapeHtml(agenda.category||"기타")}</span></div>
+    <h3>${escapeHtml(agenda.title||"제목 없음")}</h3>
+    <p>${escapeHtml(agenda.description||"").slice(0,90)}</p>
+    <div class="meetingAgendaMeta"><span>제안 ${escapeHtml(agenda.proposerName||"-")}</span><span>${meetingDateShort(agenda.createdAt)}</span></div>
+    <div class="meetingAgendaStats"><span>의견 ${comments.length || n(agenda.commentCount)}개</span><span>투표 ${voteCount}표</span>${agendaVoteClosed(agenda)?`<span>마감</span>`:""}</div>
+    <div class="meetingAgendaResult">${escapeHtml(meetingResultSummary(agenda))}</div>
+  </button>`;
+}
+function meetingAgendaDetailHtml(agenda){
+  if(!agenda) return `<div class="section meetingEmptyDetail"><h2>안건을 선택하세요</h2><p class="small">왼쪽 목록에서 학급회의 안건을 선택하면 토론과 투표가 열립니다.</p></div>`;
+  ensureMeetingDetailSubscription(agenda.id);
+  const managePanel=meetingManagePanelHtml(agenda);
+  return `<div class="meetingDetail">
+    <div class="section meetingDetailHero">
+      <div class="meetingDetailTop">${meetingStatusBadge(agenda.status)}<span class="pill blue">${escapeHtml(agenda.category||"기타")}</span></div>
+      <h2>${escapeHtml(agenda.title||"제목 없음")}</h2>
+      <div class="meetingDetailMeta"><span>제안자 ${escapeHtml(agenda.proposerName||"-")} · ${escapeHtml(agenda.proposerRole||"")}</span><span>등록 ${meetingDateText(agenda.createdAt)}</span><span>수정 ${meetingDateText(agenda.updatedAt)}</span></div>
+      <p>${escapeHtml(agenda.description||"내용이 없습니다.").replace(/\n/g,"<br>")}</p>
+    </div>
+    <div class="section">${meetingVotePanelHtml(agenda)}</div>
+    <div class="section">${meetingCommentsHtml(agenda)}</div>
+    ${managePanel?`<div class="section">${managePanel}</div>`:""}
+  </div>`;
+}
+function renderClassMeetingTab(context="student"){
+  ensureClassMeetingSubscription();
+  const actor=meetingActor();
+  const rows=sortedMeetingAgendas();
+  let selected=meetingAgenda(meetingState.selectedAgendaId);
+  if(!selected && rows.length){
+    selected=rows[0];
+    meetingState.selectedAgendaId=selected.id;
+    localStorage.setItem("selectedClassMeetingAgenda",selected.id);
+  }
+  const lead=context==="teacher" ? "안건 등록, 상태 변경, 투표 종료와 결과 확정을 관리합니다." : "우리 반 안건을 보고 의견을 남기고 투표합니다.";
+  return `<div class="classMeetingPage">
+    <div class="section classMeetingHero"><div class="head"><div><h2>학급회의</h2><div class="sub">${lead}</div></div><div class="toolbar"><span class="pill blue">${actor.label}</span><span class="pill purple">투표중 ${meetingBadgeCount()}건</span></div></div></div>
+    ${meetingState.error?`<div class="expireNotice"><b>Firestore 연결 오류</b>: ${escapeHtml(meetingState.error)}</div>`:""}
+    <div class="meetingLayout">
+      <aside class="meetingListPane">
+        ${meetingAgendaFormHtml()}
+        <div class="section"><div class="head compact"><div><h3>안건 목록</h3><div class="sub">${meetingState.loading?"불러오는 중":`${rows.length}건`}</div></div></div>${meetingFilteredTabsHtml()}<div class="meetingAgendaList">${rows.map(meetingAgendaCardHtml).join("") || `<p class="small">표시할 안건이 없습니다.</p>`}</div></div>
+      </aside>
+      <main class="meetingDetailPane">${meetingAgendaDetailHtml(selected)}</main>
+    </div>
+  </div>`;
+}
+function renderClassMeetingsTeacher(){
+  const el=document.getElementById("classMeetings");
+  if(el) el.innerHTML=renderClassMeetingTab("teacher");
+}
+function meetingNotificationEvent(agenda,action){
+  const titles={
+    created:"새 학급회의 안건",
+    voteStarted:"학급회의 투표 시작",
+    voteEnded:"학급회의 투표 종료",
+    passed:"학급회의 안건 통과",
+    rejected:"학급회의 안건 부결"
+  };
+  return notificationEventBase({
+    type:"classMeeting",
+    action,
+    audience:"students",
+    targetStudentIds:students().map(s=>s.id),
+    agendaId:agenda.id,
+    title:`${titles[action]||"학급회의"} · ${agenda.title||"안건"}`,
+    body:notificationBodyText(agenda.description,"학급회의 탭에서 확인하세요."),
+    icon:"/assets/icons/app-icon-192.png",
+    badge:"/assets/icons/app-icon-192.png",
+    url:"/",
+    createdBy:agenda.proposerId || TEACHER_ID
+  });
+}
+async function pushMeetingNotification(agenda,action){
+  const ev=meetingNotificationEvent(agenda,action);
+  if(!ev.targetStudentIds.length) return;
+  await dbSet(`notificationEvents/${ev.id}`,ev).catch(e=>console.warn("meeting notification failed", e));
+}
+function meetingActorForWrite(){
+  const actor=meetingActor();
+  if(actor.role==="guest"){
+    toast("학생 로그인 또는 교사 권한이 필요합니다.");
+    return null;
+  }
+  return actor;
+}
+window.setMeetingFilter = function(filter){
+  meetingState.filter=filter || "all";
+  localStorage.setItem("classMeetingFilter",meetingState.filter);
+  render();
+}
+function openAgenda(id,rerender=true){
+  meetingState.selectedAgendaId=id || "";
+  if(id) localStorage.setItem("selectedClassMeetingAgenda",id);
+  else localStorage.removeItem("selectedClassMeetingAgenda");
+  ensureMeetingDetailSubscription(id);
+  if(rerender) render();
+}
+window.openAgenda=openAgenda;
+window.createAgenda = async function(){
+  const actor=meetingActorForWrite();
+  if(!actor || !canCreateAgenda(actor)) return toast("안건 등록 권한이 없습니다.");
+  const title=String(document.getElementById("meetingTitle")?.value||"").trim();
+  const description=String(document.getElementById("meetingDescription")?.value||"").trim();
+  const category=document.getElementById("meetingCategory")?.value || "기타";
+  const options=String(document.getElementById("meetingOptions")?.value||"").split(/\n+/).map(x=>x.trim()).filter(Boolean).slice(0,8);
+  if(!title) return toast("안건 제목을 입력하세요.");
+  if(!description) return toast("안건 설명을 입력하세요.");
+  const refDoc=doc(collection(fsDb,"classMeetings"));
+  const agenda={
+    id:refDoc.id,
+    title,
+    description,
+    category:MEETING_CATEGORIES.includes(category)?category:"기타",
+    proposerId:actor.id,
+    proposerName:actor.name,
+    proposerRole:actor.role,
+    status:"discussion",
+    createdAt:serverTimestamp(),
+    updatedAt:serverTimestamp(),
+    voteStartedAt:null,
+    voteEndedAt:null,
+    voteDeadline:null,
+    options:options.length>=2 ? options : MEETING_OPTIONS,
+    result:{totalVotes:0,optionCounts:Object.fromEntries((options.length>=2?options:MEETING_OPTIONS).map(opt=>[opt,0])),passedOption:null},
+    commentCount:0,
+    voteCount:0,
+    isDeleted:false
+  };
+  try{
+    await setDoc(refDoc,agenda);
+    await pushMeetingNotification({...agenda,createdAt:seoulIsoString()},"created");
+    openAgenda(refDoc.id,false);
+    toast("학급회의 안건 등록 완료");
+    render();
+  }catch(e){
+    console.error("meeting create failed", e);
+    toast(`안건 등록 실패: ${e.message || e}`);
+  }
+}
+window.editAgenda = async function(id){
+  const agenda=meetingAgenda(id);
+  const actor=meetingActorForWrite();
+  if(!agenda || !actor) return;
+  if(!canEditAgenda(agenda,actor)) return toast("안건 수정 권한이 없습니다.");
+  const title=prompt("안건 제목",agenda.title||"");
+  if(title===null) return;
+  const description=prompt("안건 설명",agenda.description||"");
+  if(description===null) return;
+  const category=prompt(`카테고리 (${MEETING_CATEGORIES.join("/")})`,agenda.category||"기타");
+  if(category===null) return;
+  const cleanTitle=String(title).trim();
+  const cleanDescription=String(description).trim();
+  if(!cleanTitle) return toast("제목 없이 저장할 수 없습니다.");
+  if(!cleanDescription) return toast("설명 없이 저장할 수 없습니다.");
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",id),{
+      title:cleanTitle,
+      description:cleanDescription,
+      category:MEETING_CATEGORIES.includes(category)?category:"기타",
+      updatedAt:serverTimestamp()
+    });
+    toast("안건 수정 완료");
+  }catch(e){
+    console.error("meeting edit failed", e);
+    toast(`안건 수정 실패: ${e.message || e}`);
+  }
+}
+window.updateAgendaStatus = async function(id,status){
+  const agenda=meetingAgenda(id);
+  const actor=meetingActorForWrite();
+  if(!agenda || !actor) return;
+  if(!canChangeAgendaStatus(status,actor)) return toast("상태 변경 권한이 없습니다.");
+  if(["passed","rejected"].includes(status) && actor.role!=="teacher") return toast("통과/부결 확정은 교사만 가능합니다.");
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",id),{status,updatedAt:serverTimestamp()});
+    if(["passed","rejected"].includes(status)) await pushMeetingNotification({...agenda,status},status);
+    toast("상태 변경 완료");
+  }catch(e){
+    console.error("meeting status failed", e);
+    toast(`상태 변경 실패: ${e.message || e}`);
+  }
+}
+window.startAgendaVote = async function(id){
+  const agenda=meetingAgenda(id);
+  const actor=meetingActorForWrite();
+  if(!agenda || !actor) return;
+  if(!canChangeAgendaStatus("voting",actor)) return toast("투표 시작 권한이 없습니다.");
+  const raw=document.getElementById(`meetingDeadline_${id}`)?.value || "";
+  const deadline=raw ? new Date(raw) : null;
+  if(deadline && Number.isNaN(deadline.getTime())) return toast("투표 마감 시간을 확인하세요.");
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",id),{
+      status:"voting",
+      voteStartedAt:serverTimestamp(),
+      voteDeadline:deadline,
+      updatedAt:serverTimestamp()
+    });
+    await pushMeetingNotification({...agenda,status:"voting"},"voteStarted");
+    toast("투표를 시작했습니다.");
+  }catch(e){
+    console.error("meeting vote start failed", e);
+    toast(`투표 시작 실패: ${e.message || e}`);
+  }
+}
+window.endAgendaVote = async function(id){
+  const agenda=meetingAgenda(id);
+  const actor=meetingActorForWrite();
+  if(!agenda || !actor) return;
+  if(!["teacher","president"].includes(actor.role)) return toast("투표 종료 권한이 없습니다.");
+  try{
+    const voteSnap=await getDocs(collection(fsDb,"classMeetings",id,"votes"));
+    const votes=voteSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const result=meetingResultFromVotes(arr(agenda.options).length?arr(agenda.options):MEETING_OPTIONS,votes);
+    await updateDoc(doc(fsDb,"classMeetings",id),{
+      status:"closed",
+      voteEndedAt:serverTimestamp(),
+      updatedAt:serverTimestamp(),
+      result,
+      voteCount:result.totalVotes
+    });
+    await pushMeetingNotification({...agenda,result,status:"closed"},"voteEnded");
+    toast("투표 종료 및 결과 집계 완료");
+  }catch(e){
+    console.error("meeting vote end failed", e);
+    toast(`투표 종료 실패: ${e.message || e}`);
+  }
+}
+window.deleteAgenda = async function(id){
+  const actor=meetingActorForWrite();
+  if(!actor || !canDeleteAgenda(actor)) return toast("안건 삭제는 교사만 가능합니다.");
+  if(!confirm("이 안건을 삭제 처리할까요?")) return;
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",id),{isDeleted:true,updatedAt:serverTimestamp()});
+    if(meetingState.selectedAgendaId===id) openAgenda("",false);
+    toast("안건 삭제 완료");
+    render();
+  }catch(e){
+    console.error("meeting delete failed", e);
+    toast(`안건 삭제 실패: ${e.message || e}`);
+  }
+}
+window.submitAgendaComment = async function(agendaId){
+  const agenda=meetingAgenda(agendaId);
+  const actor=meetingActorForWrite();
+  if(!agenda || !actor) return;
+  if(!["discussion","voting"].includes(agenda.status)) return toast("토론중 또는 투표중 안건에만 의견을 남길 수 있습니다.");
+  const type=document.getElementById("meetingCommentType")?.value || "기타";
+  const content=String(document.getElementById("meetingCommentContent")?.value||"").trim();
+  if(!content) return toast("의견 내용을 입력하세요.");
+  const refDoc=doc(collection(fsDb,"classMeetings",agendaId,"comments"));
+  const writerJob=actor.role==="teacher" ? "교사" : (studentJobName(actor.student)||"학생");
+  try{
+    await setDoc(refDoc,{
+      id:refDoc.id,
+      agendaId,
+      writerId:actor.id,
+      writerName:actor.name,
+      writerJob,
+      type:MEETING_COMMENT_TYPES.includes(type)?type:"기타",
+      content,
+      createdAt:serverTimestamp(),
+      updatedAt:serverTimestamp(),
+      isDeleted:false
+    });
+    await updateDoc(doc(fsDb,"classMeetings",agendaId),{commentCount:n(agenda.commentCount)+1,updatedAt:serverTimestamp()}).catch(()=>{});
+    const el=document.getElementById("meetingCommentContent");
+    if(el) el.value="";
+    toast("의견 등록 완료");
+  }catch(e){
+    console.error("meeting comment failed", e);
+    toast(`의견 등록 실패: ${e.message || e}`);
+  }
+}
+window.editAgendaComment = async function(agendaId,commentId){
+  const actor=meetingActorForWrite();
+  const c=agendaComments(agendaId).find(x=>x.id===commentId);
+  if(!actor || !c) return;
+  if(c.writerId!==actor.id) return toast("내가 쓴 의견만 수정할 수 있습니다.");
+  const content=prompt("의견 수정",c.content||"");
+  if(content===null) return;
+  const clean=String(content).trim();
+  if(!clean) return toast("빈 의견으로 수정할 수 없습니다.");
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",agendaId,"comments",commentId),{content:clean,updatedAt:serverTimestamp()});
+    toast("의견 수정 완료");
+  }catch(e){
+    console.error("meeting comment edit failed", e);
+    toast(`의견 수정 실패: ${e.message || e}`);
+  }
+}
+window.deleteAgendaComment = async function(agendaId,commentId){
+  const actor=meetingActorForWrite();
+  const c=agendaComments(agendaId).find(x=>x.id===commentId);
+  if(!actor || !c) return;
+  if(c.writerId!==actor.id && !canManageComments(actor)) return toast("의견 삭제 권한이 없습니다.");
+  if(!confirm("이 의견을 삭제 처리할까요?")) return;
+  try{
+    await updateDoc(doc(fsDb,"classMeetings",agendaId,"comments",commentId),{isDeleted:true,updatedAt:serverTimestamp()});
+    const agenda=meetingAgenda(agendaId);
+    if(agenda) await updateDoc(doc(fsDb,"classMeetings",agendaId),{commentCount:Math.max(0,n(agenda.commentCount)-1),updatedAt:serverTimestamp()}).catch(()=>{});
+    toast("의견 삭제 완료");
+  }catch(e){
+    console.error("meeting comment delete failed", e);
+    toast(`의견 삭제 실패: ${e.message || e}`);
+  }
+}
+window.submitAgendaVote = async function(agendaId,option){
+  const agenda=meetingAgenda(agendaId);
+  if(!selectedStudent) return toast("학생으로 로그인해야 투표할 수 있습니다.");
+  if(!agenda) return toast("안건을 찾을 수 없습니다.");
+  if(agenda.status!=="voting") return toast("투표중인 안건만 투표할 수 있습니다.");
+  if(agendaVoteClosed(agenda)) return toast("투표 마감 시간이 지났습니다.");
+  const options=arr(agenda.options).length ? arr(agenda.options) : MEETING_OPTIONS;
+  if(!options.includes(option)) return toast("투표 선택지를 확인하세요.");
+  const existing=agendaVotes(agendaId).find(v=>v.voterId===selectedStudent);
+  try{
+    await setDoc(doc(fsDb,"classMeetings",agendaId,"votes",selectedStudent),{
+      agendaId,
+      voterId:selectedStudent,
+      voterName:studentName(selectedStudent),
+      selectedOption:option,
+      createdAt:existing?.createdAt || serverTimestamp(),
+      updatedAt:serverTimestamp()
+    },{merge:true});
+    await updateDoc(doc(fsDb,"classMeetings",agendaId),{voteCount:existing?n(agenda.voteCount):n(agenda.voteCount)+1,updatedAt:serverTimestamp()}).catch(()=>{});
+    toast(existing ? "투표 선택을 바꿨습니다." : "투표 완료");
+  }catch(e){
+    console.error("meeting vote failed", e);
+    toast(`투표 실패: ${e.message || e}`);
+  }
 }
 function noticeTsText(v){
   if(!v) return "-";
@@ -4683,6 +5332,7 @@ function teacherTabCatalog(){
     {id:"tickets",name:"티켓",desktopName:"티켓시장",icon:"confirmation_number"},
     {id:"finance",name:"금융",desktopName:"예금·채권",icon:"savings"},
     {id:"creditCards",name:"카드",desktopName:"신용카드 관리",icon:"credit_card"},
+    {id:"classMeetings",name:"회의",desktopName:"학급회의",icon:"forum"},
     {id:"noticeboard",name:"알림",desktopName:"알림장",icon:"notifications"},
     {id:"ledger",name:"장부",desktopName:"거래장부",icon:"receipt_long"},
     {id:"settings",name:"설정",desktopName:"설정",icon:"settings"},
@@ -4695,6 +5345,7 @@ function teacherVisibleTab(active=currentTab){
   return mobileTeacherPrimaryIds().includes(active) ? active : "teacherMore";
 }
 function teacherNavBadgeCount(id){
+  if(id==="classMeetings") return meetingBadgeCount();
   if(id==="noticeboard") return teacherUnreadMessages()+todayUncheckedNoticeCount();
   if(id==="transactions") return arr(data.requests).length;
   if(id==="creditCards") return creditCardRows().filter(c=>c.status==="pending").length;
@@ -4711,6 +5362,12 @@ function ensureTeacherMoreSection(){
   if(view && !document.getElementById("creditCards")){
     const sec=document.createElement("section");
     sec.id="creditCards";
+    sec.className="tabPage hidden";
+    view.appendChild(sec);
+  }
+  if(view && !document.getElementById("classMeetings")){
+    const sec=document.createElement("section");
+    sec.id="classMeetings";
     sec.className="tabPage hidden";
     view.appendChild(sec);
   }
@@ -4755,6 +5412,7 @@ function renderTeacherMore(){
     tickets:`재고 ${totalTicketStock()}장`,
     finance:`채권 ${arr(data.bonds).filter(b=>b.status==="active").length}`,
     creditCards:`신청 ${creditCardRows().filter(c=>c.status==="pending").length}`,
+    classMeetings:`투표중 ${meetingBadgeCount()}건`,
     noticeboard:`미읽음 ${unread}`,
     students:`학생 ${students().length}명`,
     transactions:`대기 ${pending}개`
@@ -4770,6 +5428,7 @@ function renderTeacherMore(){
     tickets:"티켓 가격, 재고, 구매/판매 처리",
     finance:"예금, 적금, 채권, 금리 관리",
     creditCards:"신청 승인, 한도, 청구와 연체 관리",
+    classMeetings:"안건 등록, 토론, 투표와 결과 확정",
     noticeboard:"공지, 숙제, 체크, 메시지함",
     ledger:"전체 거래 내역 확인",
     settings:"학생용 탭, 데이터, 시스템 설정"
@@ -4854,6 +5513,7 @@ const teacherRenderers={
   tickets:["티켓시장",renderTickets],
   finance:["예금·채권",renderFinance],
   creditCards:["신용카드 관리",renderCreditCardsTeacher],
+  classMeetings:["학급회의",renderClassMeetingsTeacher],
   noticeboard:["알림장",renderNoticeboardTeacher],
   ledger:["거래장부",renderLedger],
   settings:["설정",renderSettings],
@@ -4882,6 +5542,7 @@ function render(){
   document.body.dataset.studentTab=studentTab;
   document.body.dataset.studentTheme=(mode==="student" && selectedStudent) ? studentThemeId(selectedStudent) : "green";
   ensureNoticeSubscriptions();
+  ensureClassMeetingSubscription();
   ensureTeacherMoreSection();
   if(mode==="teacher") teacherTabsEl.innerHTML=teacherTabsHtml(currentTab);
   teacherTabsEl.classList.toggle("hidden",mode!=="teacher");
@@ -6193,6 +6854,7 @@ function mobileMoreStudentHtml(id){
     ]},
     {title:"친구와 활동",cards:[
       {id:"notice",icon:"notifications",title:"알림",description:"공지와 메시지",onClick:"setStudentTab('noticeboard')"},
+      {id:"classMeetings",icon:"forum",title:"회의",description:"안건 토론과 투표",badge:`투표중 ${meetingBadgeCount()}건`,onClick:"setStudentTab('classMeetings')"},
       {id:"avatar",icon:"face",title:"아바타",description:"아바타 상점과 보유"},
       {id:"homeStyle",icon:"palette",title:"홈 스타일",description:"내 홈 꾸미기 설정"}
     ]},
@@ -6239,6 +6901,7 @@ function renderStudentView(){
   if(activeTab!==studentTab){studentTab=activeTab; localStorage.setItem("studentTab",studentTab);}
   const body = studentTab==="dashboard" ? studentDashboardHtml(selected)
     : studentTab==="noticeboard" ? noticeboardStudentHtml(selected)
+    : studentTab==="classMeetings" ? renderClassMeetingTab("student")
     : studentTab==="market" ? marketHtml(selected)
     : studentTab==="industry" ? industryHtml(selected)
     : studentTab==="workClaims" ? studentWorkClaimsHtml(selected)

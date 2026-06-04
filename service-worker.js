@@ -1,4 +1,4 @@
-const CACHE_NAME = "economy-class-app-v174";
+const CACHE_NAME = "economy-class-app-v175";
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDtwpc4THHE_t3fSfV-FgS4KHF2krUosvA",
   authDomain: "economy-44982.firebaseapp.com",

@@ -3,11 +3,15 @@
     "source": "functions",
     "runtime": "nodejs22"
   },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "site": "economy-44982",
     "public": ".",
     "ignore": [
       "firebase.json",
+      "firestore.rules",
       "**/.*",
       "**/node_modules/**",
       "**/*.exe",
