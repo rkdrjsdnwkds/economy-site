@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    /*
+      The current app uses a simple front-end PIN/teacher password flow, not
+      Firebase Authentication. Firestore Rules therefore cannot reliably know
+      who is a teacher, president, vice president, or student.
+
+      Keep writes scoped to the classMeetings feature and use soft-delete fields.
+      The app enforces role checks in app.js. When Firebase Auth is introduced,
+      replace these broad classMeetings rules with auth-backed role checks.
+    */
+    match /classMeetings/{agendaId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
+
+      match /votes/{studentId} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

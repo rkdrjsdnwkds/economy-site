@@ -1,0 +1,10 @@
+﻿{
+  "name": "economy-site",
+  "version": "0.175.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node tools/dev-server.mjs",
+    "check": "node tools/check.mjs"
+  }
+}

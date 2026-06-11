@@ -1,0 +1,20 @@
+OK	4337	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/
+OK	471861	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/app.js
+OK	157273	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/styles.css?v=67
+OK	2251	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/startup.js
+OK	1287	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/site-config.js
+OK	4389	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/catalog.js
+ERROR	https://economy-44982.web.app/service-worker.js	HTTP Error 404: Not Found
+OK	618	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/manifest.webmanifest
+OK	10269	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/icons/favicon.png
+OK	58052	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/icons/apple-touch-icon.png
+OK	2618	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/pwa-register.js?v=60
+OK	691860	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/avatar-assets.js
+OK	2172	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/custom-avatars.js
+OK	1200	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/miniroom-assets.js
+ERROR	https://economy-44982.web.app/${item.src}	HTTP Error 404: Not Found
+ERROR	https://economy-44982.web.app/${it.src}	HTTP Error 404: Not Found
+ERROR	https://economy-44982.web.app/${roomAssetSrc(item)}	HTTP Error 404: Not Found
+OK	117362	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/assets/room/floor_wood.png
+OK	92067	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/assets/room/wall_window.png
+OK	157678	Fri, 22 May 2026 03:11:58 GMT	https://economy-44982.web.app/assets/room/wall_decor.png

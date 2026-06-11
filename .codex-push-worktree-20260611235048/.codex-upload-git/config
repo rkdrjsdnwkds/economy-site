@@ -1,0 +1,17 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	worktree = C:/Users/강건우/Desktop/economy-site
+	symlinks = false
+	ignorecase = true
+[user]
+	email = rkdrjsdnwkds@gmail.com
+	name = rkdrjsdnwkds
+[remote "origin"]
+	url = https://github.com/rkdrjsdnwkds/economy-site.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "codex/school-upload"]
+	remote = origin
+	merge = refs/heads/main

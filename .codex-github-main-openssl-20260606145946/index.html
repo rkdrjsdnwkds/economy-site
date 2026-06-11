@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>경제교실 온라인 운영 사이트 Firebase v175</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#4c8f3a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="경제교실" />
+  <link rel="icon" type="image/png" href="/icons/favicon.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="styles.css?v=175" />
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <h1>경제교실 온라인 운영 사이트</h1>
+      <p>Firebase Realtime Database로 교사 컴퓨터와 학생 태블릿이 같은 장부를 봅니다. <b style="color:#bfdbfe">v175</b></p>
+    </div>
+    <div class="topBtns">
+      <button onclick="askTeacherPassword()">교사용</button>
+      <button onclick="switchToStudentMode()">학생용</button>
+      <button onclick="toggleFullscreen()">전체화면</button>
+    </div>
+  </header>
+
+  <div id="mobileModeSwitch" class="mobileModeSwitch" aria-label="화면 모드 전환">
+    <button class="mobileSwitchTeacher" onclick="askTeacherPassword()">👨‍🏫 교사용</button>
+    <button class="mobileSwitchStudent" onclick="switchToStudentMode()">👦 학생용</button>
+  </div>
+
+  <div id="status" class="section"><b>Firebase 연결 중...</b><div class="small">v175 학급회의</div></div>
+
+  <nav id="teacherTabs" class="tabs hidden">
+    <button class="active" data-tab="dashboard" onclick="setTab('dashboard')">대시보드</button>
+    <button data-tab="students" onclick="setTab('students')">학생·잔고</button>
+    <button data-tab="transactions" onclick="setTab('transactions')">송금·지급·벌금</button>
+    <button data-tab="jobs" onclick="setTab('jobs')">직업·임금</button>
+    <button data-tab="shop" onclick="setTab('shop')">상품·상점</button>
+    <button data-tab="industry" onclick="setTab('industry')">산업</button>
+    <button data-tab="tickets" onclick="setTab('tickets')">티켓시장</button>
+    <button data-tab="finance" onclick="setTab('finance')">예금·채권</button>
+    <button data-tab="classMeetings" onclick="setTab('classMeetings')">학급회의</button>
+    <button data-tab="noticeboard" onclick="setTab('noticeboard')">알림장</button>
+    <button data-tab="ledger" onclick="setTab('ledger')">거래장부</button>
+    <button data-tab="settings" onclick="setTab('settings')">설정</button>
+  </nav>
+
+  <main id="teacherView" class="hidden">
+    <section id="dashboard" class="tabPage"></section>
+    <section id="students" class="tabPage hidden"></section>
+    <section id="transactions" class="tabPage hidden"></section>
+    <section id="jobs" class="tabPage hidden"></section>
+    <section id="shop" class="tabPage hidden"></section>
+    <section id="industry" class="tabPage hidden"></section>
+    <section id="tickets" class="tabPage hidden"></section>
+    <section id="finance" class="tabPage hidden"></section>
+    <section id="creditCards" class="tabPage hidden"></section>
+    <section id="classMeetings" class="tabPage hidden"></section>
+    <section id="noticeboard" class="tabPage hidden"></section>
+    <section id="ledger" class="tabPage hidden"></section>
+    <section id="settings" class="tabPage hidden"></section>
+    <section id="teacherMore" class="tabPage hidden"></section>
+  </main>
+
+  <main id="studentView" class="hidden"></main>
+</div>
+
+<div id="chartModal" class="modalBack hidden" onclick="if(event.target.id==='chartModal')hideChart()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modalHead">
+      <div>
+        <h2 id="chartTitle">가격 차트</h2>
+        <div class="sub" id="chartSub">최근 가격 기록</div>
+      </div>
+      <button onclick="hideChart()">닫기</button>
+    </div>
+    <canvas id="chartCanvas" width="1080" height="500"></canvas>
+    <p class="small">기록이 쌓일수록 전체 열매 보유량 변화와 등락률을 확인할 수 있습니다.</p>
+  </div>
+</div>
+
+<div id="detailModal" class="modalBack hidden" onclick="if(event.target.id==='detailModal')hideStudentDetail()">
+  <div class="modal detailModal" onclick="event.stopPropagation()">
+    <div class="modalHead">
+      <div>
+        <h2 id="detailTitle">학생 상세</h2>
+        <div class="sub" id="detailSub">학생별 자산·보유 현황·최근 거래를 확인합니다.</div>
+      </div>
+      <button onclick="hideStudentDetail()">닫기</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script src="startup.js?v=175"></script>
+<script src="pwa-register.js?v=175"></script>
+</body>
+</html>

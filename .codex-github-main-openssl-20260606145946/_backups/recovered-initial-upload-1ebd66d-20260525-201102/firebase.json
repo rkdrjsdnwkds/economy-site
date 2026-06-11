@@ -1,0 +1,20 @@
+{
+  "hosting": {
+    "site": "economy-44982",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.exe",
+      "**/*.bat",
+      "**/*.cmd",
+      "**/*.ps1",
+      "**/*.zip",
+      "**/*.txt",
+      "tools/**",
+      "*.md",
+      "package.json"
+    ]
+  }
+}
