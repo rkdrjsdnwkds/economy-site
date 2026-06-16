@@ -1,4 +1,4 @@
-const CACHE_NAME = "economy-class-app-v175";
+const CACHE_NAME = "economy-class-app-v176";
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDtwpc4THHE_t3fSfV-FgS4KHF2krUosvA",
   authDomain: "economy-44982.firebaseapp.com",
@@ -43,6 +43,7 @@ const APP_SHELL = [
   "./site-config.js",
   "./catalog.js",
   "./app.js",
+  "./ai-question-bridge.js",
   "./restored-avatar-images.js",
   "./styles.css",
   "./manifest.webmanifest",
@@ -118,11 +119,7 @@ self.addEventListener("notificationclick", event => {
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
       const existing = clientList.find(client => new URL(client.url).origin === self.location.origin);
-      if (existing) {
-        existing.focus();
-        existing.postMessage({ type: "ECONOMY_NOTIFICATION_CLICK", data: event.notification.data || {} });
-        return;
-      }
+      if (existing) return existing.focus().then(client => client.navigate(targetUrl));
       return clients.openWindow(targetUrl);
     })
   );
