@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: Economy Classroom AI Question Bridge
+  version: 1.0.0
+servers:
+  - url: https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+paths:
+  /:
+    post:
+      operationId: runAiQuestionBridge
+      summary: Get, save, or review AI question requests from the classroom economy site.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - health
+                    - getNextQuestion
+                    - saveAnswer
+                    - markNeedsTeacherReview
+                bridgeToken:
+                  type: string
+                  description: Optional shared token if REQUIRE_TOKEN is enabled in Apps Script.
+                requestId:
+                  type: string
+                studentId:
+                  type: string
+                studentName:
+                  type: string
+                mode:
+                  type: string
+                question:
+                  type: string
+                answer:
+                  type: string
+                reason:
+                  type: string
+              required:
+                - action
+      responses:
+        '200':
+          description: Action result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
