@@ -11,8 +11,8 @@
 
 window.ECONOMY_SITE_CONFIG = {
   meta: {
-    version: "175",
-    label: "v175 class meetings"
+    version: "176",
+    label: "v176 AI question bridge"
   },
 
   theme: {
