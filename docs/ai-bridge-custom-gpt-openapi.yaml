@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: Economy Classroom AI Question Bridge
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
 paths:
   /:
     post:
       operationId: runAiQuestionBridge
-      summary: Get, save, or review AI question requests from the classroom economy site.
+      summary: Get, save, review, and usage-log AI question requests from the classroom economy site.
       requestBody:
         required: true
         content:
@@ -40,6 +40,18 @@ paths:
                   type: string
                 reason:
                   type: string
+                modelName:
+                  type: string
+                  description: Model name used for the answer, for usage/cost logging. Leave blank if unavailable.
+                promptTokens:
+                  type: integer
+                  description: Prompt/input token count if available. Apps Script estimates it when omitted.
+                completionTokens:
+                  type: integer
+                  description: Completion/output token count if available. Apps Script estimates it when omitted.
+                totalTokens:
+                  type: integer
+                  description: Total token count if available. Apps Script computes prompt+completion when omitted.
               required:
                 - action
       responses:
