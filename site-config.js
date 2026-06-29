@@ -1,4 +1,4 @@
-﻿/*
+/*
   Change hub for economy-site.
 
   Use this file for frequent tuning:
@@ -11,8 +11,8 @@
 
 window.ECONOMY_SITE_CONFIG = {
   meta: {
-    version: "176",
-    label: "v176 AI question bridge"
+    version: "177",
+    label: "v177 AI usage logging"
   },
 
   theme: {
