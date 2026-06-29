@@ -17,6 +17,8 @@
    - 스스로 다시 생각해 볼 질문
 6. 답변 생성 후 `runAiQuestionBridge` 액션을 `saveAnswer`로 호출한다.
    - requestId, studentId, studentName, question, answer를 포함한다.
+   - 가능하면 modelName, promptTokens, completionTokens, totalTokens도 포함한다.
+   - 토큰 수를 알 수 없으면 비워 둔다. Apps Script가 글자수 기반 추정값으로 `aiUsageLogs`에 기록한다.
 7. 마지막에는 교사에게 “처리 완료”와 문서 링크만 짧게 보고한다.
 
 ## 답변 원칙
@@ -25,3 +27,4 @@
 - 불필요하게 길게 쓰지 않는다.
 - 교실 수업에서는 선생님 안내가 우선임을 부드럽게 전제한다.
 - 개인정보를 문서에 다시 적지 않는다.
+- 사용량 로그에는 질문 원문과 답변 원문을 저장하지 않는다.
